@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+
 import { createClient } from '@supabase/supabase-js';
 
 const APP_VERSION = '1.2.0';
