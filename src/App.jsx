@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-
 import { createClient } from '@supabase/supabase-js';
 
 const APP_VERSION = '1.2.0';
@@ -557,7 +556,6 @@ export default function App() {
     }
   }
 
-  function exportCSV() {
   // フィルタリング済みレコード
   const filteredRecords = useMemo(() => {
     return records.filter(r => {
