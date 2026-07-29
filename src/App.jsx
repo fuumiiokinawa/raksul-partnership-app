@@ -1,9 +1,8 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const APP_VERSION = '1.2.0';
-const LAST_UPDATED = '2026-02-09';
+const APP_VERSION = '1.4.0';
+const LAST_UPDATED = '2026-07-29';
 
 // CSSアニメーション用のスタイルを追加
 const pulseStyle = document.createElement('style');
@@ -429,6 +428,10 @@ export default function App() {
   // NG理由折りたたみ用state
   const [showAllNgReasons, setShowAllNgReasons] = useState(false);
 
+  // PC提案セクション折りたたみ用state
+  const [showPcReasons, setShowPcReasons] = useState(false);
+  const [showPcByStaff, setShowPcByStaff] = useState(false);
+
   useEffect(() => { fetchRecords(); }, []);
 
   async function fetchRecords() {
@@ -466,6 +469,36 @@ export default function App() {
       return;
     }
     
+    // 顧客種別必須チェック
+    if (!formData.customer_type) {
+      alert('顧客種別（新規/既存）を選択してください');
+      return;
+    }
+    
+    // 新規の場合はラクスルID登録必須
+    if (formData.customer_type === '新規' && formData.raksul_id_status !== '提案⇒開設') {
+      alert('新規ユーザーはラクスルID登録が必須です');
+      return;
+    }
+    
+    // 既存の場合はラクスルID記録必須
+    if (formData.customer_type === '既存' && !formData.existing_raksul_id) {
+      alert('既存ユーザーはラクスルIDの確認・記録が必須です');
+      return;
+    }
+    
+    // 訪問時はPC提案の選択必須
+    if (formData.sales_method === '訪問' && !formData.pc_proposal) {
+      alert('訪問時はPC提案の有無を選択してください');
+      return;
+    }
+    
+    // PC提案しなかった場合は理由必須
+    if (formData.pc_proposal === '提案しなかった' && !formData.pc_not_proposed_reason) {
+      alert('PC提案しなかった理由を入力してください');
+      return;
+    }
+    
     // 全商材の結果が選択されているかチェック
     const unselectedProducts = PRODUCTS.filter(p => !formData[`result_${p.id}`] || formData[`result_${p.id}`] === '-');
     if (unselectedProducts.length > 0) {
@@ -498,8 +531,12 @@ export default function App() {
       sales_source: formData.sales_source || null,
       sales_area: formData.sales_area || null,
       sales_method: formData.sales_method || null,
+      customer_type: formData.customer_type || null,
       timing: formData.timing || null,
       raksul_id_status: formData.raksul_id_status, raksul_email: formData.raksul_email || null,
+      existing_raksul_id: formData.existing_raksul_id || null,
+      pc_proposal: formData.pc_proposal || null,
+      pc_not_proposed_reason: formData.pc_not_proposed_reason || null,
       proposal_bank: formData.proposal_bank, proposal_pay: formData.proposal_pay,
       proposal_mall: formData.proposal_mall, proposal_meo: formData.proposal_meo, proposal_video: formData.proposal_video,
       result_bank: formData.result_bank, result_pay: formData.result_pay,
@@ -541,7 +578,11 @@ export default function App() {
       sales_source: '',
       sales_area: '',
       sales_method: '',
+      customer_type: '', // 新規/既存
       raksul_id_status: '-', raksul_email: '', 
+      existing_raksul_id: '', // 既存ユーザーのID記録用
+      pc_proposal: '', // 提案した/提案しなかった
+      pc_not_proposed_reason: '', // 提案しなかった理由
       timing: '',
       proposal_bank: '-', proposal_pay: '-', proposal_mall: '-', proposal_meo: '-', proposal_video: '-', 
       result_bank: '-', result_pay: '-', result_mall: '-', result_meo: '-', result_video: '-', 
@@ -640,14 +681,66 @@ export default function App() {
       return { product: p, ngCounts: Object.entries(counts).map(([reason, count]) => ({ reason, count })).sort((a,b) => b.count - a.count) };
     }).filter(p => p.ngCounts.length > 0);
     const videoOrdered = baseFilteredRecords.filter(r => r.video_ordered === '申込済').length;
-    return { totalVisits, idOpened, totalTossups, productStats, staffStats, officeStats, totalIncentive, ngStatsByProduct, videoOrdered };
+
+    // ===== PC提案（母数は「訪問」の記録のみ） =====
+    const pcVisitRecords = baseFilteredRecords.filter(r => r.sales_method === '訪問');
+    const pcProposedRecords = pcVisitRecords.filter(r => r.pc_proposal === '提案した');
+    const pcNotProposedRecords = pcVisitRecords.filter(r => r.pc_proposal === '提案しなかった');
+    const pcUnrecordedRecords = pcVisitRecords.filter(r => !r.pc_proposal);
+    const pcReasonCounts = {};
+    pcNotProposedRecords.forEach(r => {
+      const key = (r.pc_not_proposed_reason || '').trim() || '理由未入力';
+      pcReasonCounts[key] = (pcReasonCounts[key] || 0) + 1;
+    });
+    const pcStats = {
+      targetVisits: pcVisitRecords.length,
+      proposed: pcProposedRecords.length,
+      notProposed: pcNotProposedRecords.length,
+      unrecorded: pcUnrecordedRecords.length,
+      rate: pcVisitRecords.length > 0 ? (pcProposedRecords.length / pcVisitRecords.length * 100).toFixed(1) : '0',
+      visitRecords: pcVisitRecords,
+      proposedRecords: pcProposedRecords,
+      notProposedRecords: pcNotProposedRecords,
+      unrecordedRecords: pcUnrecordedRecords,
+      reasons: Object.entries(pcReasonCounts).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
+      byStaff: STAFF_LIST.map(s => {
+        const sv = pcVisitRecords.filter(r => r.staff === s);
+        const sp = sv.filter(r => r.pc_proposal === '提案した');
+        return { name: s, visits: sv.length, proposed: sp.length, rate: sv.length > 0 ? (sp.length / sv.length * 100).toFixed(1) : '0', records: sv, proposedRecords: sp };
+      }).filter(s => s.visits > 0).sort((a, b) => Number(b.rate) - Number(a.rate) || b.visits - a.visits)
+    };
+
+    // ===== 顧客種別（新規／既存）とラクスルID回収状況 =====
+    const newRecords = baseFilteredRecords.filter(r => r.customer_type === '新規');
+    const existingRecords = baseFilteredRecords.filter(r => r.customer_type === '既存');
+    const unsetTypeRecords = baseFilteredRecords.filter(r => !r.customer_type);
+    const newIdOpenedRecords = newRecords.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済');
+    const newIdMissingRecords = newRecords.filter(r => !(r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済'));
+    const existingIdRecordedRecords = existingRecords.filter(r => r.existing_raksul_id);
+    const existingIdMissingRecords = existingRecords.filter(r => !r.existing_raksul_id);
+    const customerStats = {
+      newCount: newRecords.length,
+      existingCount: existingRecords.length,
+      unsetCount: unsetTypeRecords.length,
+      newRecords, existingRecords, unsetTypeRecords,
+      newIdOpened: newIdOpenedRecords.length,
+      newIdMissing: newIdMissingRecords.length,
+      newIdRate: newRecords.length > 0 ? (newIdOpenedRecords.length / newRecords.length * 100).toFixed(1) : '0',
+      newIdOpenedRecords, newIdMissingRecords,
+      existingIdRecorded: existingIdRecordedRecords.length,
+      existingIdMissing: existingIdMissingRecords.length,
+      existingIdRate: existingRecords.length > 0 ? (existingIdRecordedRecords.length / existingRecords.length * 100).toFixed(1) : '0',
+      existingIdRecordedRecords, existingIdMissingRecords
+    };
+
+    return { totalVisits, idOpened, totalTossups, productStats, staffStats, officeStats, totalIncentive, ngStatsByProduct, videoOrdered, pcStats, customerStats };
   }, [filterProduct, baseFilteredRecords]);
 
   function exportCSV() {
-    const h = ['訪問日','担当者','企業名','業種','事務所','営業先','商談方法','提案タイミング','ID状態','メールアドレス','バンク提案','ペイ提案','モール提案','MEO提案','動画提案','バンク結果','ペイ結果','モール結果','MEO結果','動画結果','バンクNG','ペイNG','モールNG','MEONG','動画NG','モール未購入理由','ID未開設理由','動画申込','報酬','備考'];
+    const h = ['訪問日','担当者','企業名','業種','事務所','営業先','商談方法','顧客種別','PC提案','PC未提案理由','提案タイミング','ID状態','メールアドレス','既存ID','バンク提案','ペイ提案','モール提案','MEO提案','動画提案','バンク結果','ペイ結果','モール結果','MEO結果','動画結果','バンクNG','ペイNG','モールNG','MEONG','動画NG','モール未購入理由','ID未開設理由','動画申込','報酬','備考'];
     const rows = filteredRecords.map(r => {
       const idStatus = r.raksul_id_status === '開設済' ? '提案⇒開設' : r.raksul_id_status;
-      return [r.visit_date,r.staff,r.company,r.industry,r.office,r.sales_source,r.sales_method,r.timing,idStatus,r.raksul_email,r.proposal_bank,r.proposal_pay,r.proposal_mall,r.proposal_meo,r.proposal_video,r.result_bank,r.result_pay,r.result_mall,r.result_meo,r.result_video,r.ng_bank,r.ng_pay,r.ng_mall,r.ng_meo,r.ng_video,r.mall_not_purchased_reason,r.id_not_opened_reason,r.video_ordered,calcIncentive(r),r.note];
+      return [r.visit_date,r.staff,r.company,r.industry,r.office,r.sales_source,r.sales_method,r.customer_type,r.pc_proposal,r.pc_not_proposed_reason,r.timing,idStatus,r.raksul_email,r.existing_raksul_id,r.proposal_bank,r.proposal_pay,r.proposal_mall,r.proposal_meo,r.proposal_video,r.result_bank,r.result_pay,r.result_mall,r.result_meo,r.result_video,r.ng_bank,r.ng_pay,r.ng_mall,r.ng_meo,r.ng_video,r.mall_not_purchased_reason,r.id_not_opened_reason,r.video_ordered,calcIncentive(r),r.note];
     });
     const csv = '\uFEFF' + [h,...rows].map(r => r.map(c => `"${c||''}"`).join(',')).join('\n');
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -739,9 +832,160 @@ export default function App() {
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'10px'}}>
               <div style={{background:'#fff',borderRadius:'10px',border:'1px solid #e2e8f0',padding:'14px'}}><div style={{fontSize:'11px',color:'#64748b'}}>総訪問数</div><div style={{fontSize:'22px',fontWeight:'700',color:'#2563eb'}}>{stats.totalVisits}<span style={{fontSize:'12px',color:'#94a3b8'}}>件</span></div></div>
               <div style={{background:'#fff',borderRadius:'10px',border:'1px solid #e2e8f0',padding:'14px'}}><div style={{fontSize:'11px',color:'#64748b'}}>ID開設</div><div style={{fontSize:'22px',fontWeight:'700',color:'#6366f1'}}>{stats.idOpened}<span style={{fontSize:'12px',color:'#94a3b8'}}>件</span></div></div>
+              <div style={{background:'#fff',borderRadius:'10px',border:Number(stats.pcStats.rate)>=100&&stats.pcStats.targetVisits>0?'1px solid #059669':'1px solid #e2e8f0',padding:'14px'}}><div style={{fontSize:'11px',color:'#64748b'}}>💻 PC提案率</div><div style={{fontSize:'22px',fontWeight:'700',color:Number(stats.pcStats.rate)>=100?'#059669':Number(stats.pcStats.rate)>=70?'#d97706':'#dc2626'}}>{stats.pcStats.rate}<span style={{fontSize:'12px',color:'#94a3b8'}}>%</span></div></div>
               <div style={{background:'#fff',borderRadius:'10px',border:'1px solid #e2e8f0',padding:'14px'}}><div style={{fontSize:'11px',color:'#64748b'}}>トスアップ</div><div style={{fontSize:'22px',fontWeight:'700',color:'#1e40af'}}>{stats.totalTossups}<span style={{fontSize:'12px',color:'#94a3b8'}}>件</span></div></div>
               <div style={{background:'#fff',borderRadius:'10px',border:'1px solid #e2e8f0',padding:'14px'}}><div style={{fontSize:'11px',color:'#64748b'}}>動画申込</div><div style={{fontSize:'22px',fontWeight:'700',color:'#dc2626'}}>{stats.videoOrdered}<span style={{fontSize:'12px',color:'#94a3b8'}}>件</span></div></div>
               <div style={{background:'#fff',borderRadius:'10px',border:'1px solid #e2e8f0',padding:'14px'}}><div style={{fontSize:'11px',color:'#64748b'}}>総報酬</div><div style={{fontSize:'22px',fontWeight:'700',color:'#059669'}}>¥{stats.totalIncentive.toLocaleString()}</div></div>
+            </div>
+
+            {/* 💻 PC提案 ＆ 👤 顧客種別 */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:'12px'}}>
+
+              {/* PC提案 */}
+              <div style={{background:'#fff',borderRadius:'12px',border:'1px solid #e2e8f0',padding:'16px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px',flexWrap:'wrap',gap:'8px'}}>
+                  <h3 style={{margin:0,fontSize:'14px',fontWeight:'600'}}>💻 訪問時のPC提案</h3>
+                  <span style={{padding:'3px 10px',background:'#f1f5f9',color:'#64748b',borderRadius:'10px',fontSize:'11px'}}>対象：訪問 {stats.pcStats.targetVisits}件</span>
+                </div>
+
+                {stats.pcStats.targetVisits === 0 ? (
+                  <div style={{padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>対象となる訪問記録がありません</div>
+                ) : (
+                  <>
+                    {/* 提案率バー */}
+                    <div style={{marginBottom:'14px'}}>
+                      <div style={{display:'flex',alignItems:'baseline',gap:'8px',marginBottom:'6px'}}>
+                        <span style={{fontSize:'32px',fontWeight:'700',color:Number(stats.pcStats.rate)>=100?'#059669':Number(stats.pcStats.rate)>=70?'#d97706':'#dc2626'}}>{stats.pcStats.rate}<span style={{fontSize:'16px'}}>%</span></span>
+                        <span style={{fontSize:'12px',color:'#64748b'}}>提案率（目標 100%）</span>
+                      </div>
+                      <div style={{height:'8px',background:'#f1f5f9',borderRadius:'4px',overflow:'hidden'}}>
+                        <div style={{width:`${Math.min(Number(stats.pcStats.rate),100)}%`,height:'100%',background:Number(stats.pcStats.rate)>=100?'#059669':Number(stats.pcStats.rate)>=70?'#f59e0b':'#dc2626',borderRadius:'4px',transition:'width 0.3s'}}></div>
+                      </div>
+                    </div>
+
+                    {/* 内訳チップ */}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'12px'}}>
+                      <div onClick={()=>stats.pcStats.proposed>0&&setDetailModal({title:'PC提案あり',records:stats.pcStats.proposedRecords})} style={{padding:'10px',background:'#dcfce7',borderRadius:'8px',textAlign:'center',cursor:stats.pcStats.proposed>0?'pointer':'default'}}>
+                        <div style={{fontSize:'11px',color:'#166534'}}>✓ 提案した</div>
+                        <div style={{fontSize:'20px',fontWeight:'700',color:'#059669',textDecoration:stats.pcStats.proposed>0?'underline':'none'}}>{stats.pcStats.proposed}</div>
+                      </div>
+                      <div onClick={()=>stats.pcStats.notProposed>0&&setDetailModal({title:'PC提案なし',records:stats.pcStats.notProposedRecords})} style={{padding:'10px',background:'#fef3c7',borderRadius:'8px',textAlign:'center',cursor:stats.pcStats.notProposed>0?'pointer':'default'}}>
+                        <div style={{fontSize:'11px',color:'#92400e'}}>✗ しなかった</div>
+                        <div style={{fontSize:'20px',fontWeight:'700',color:'#d97706',textDecoration:stats.pcStats.notProposed>0?'underline':'none'}}>{stats.pcStats.notProposed}</div>
+                      </div>
+                      <div onClick={()=>stats.pcStats.unrecorded>0&&setDetailModal({title:'PC提案 未記録',records:stats.pcStats.unrecordedRecords})} style={{padding:'10px',background:stats.pcStats.unrecorded>0?'#fee2e2':'#f8fafc',borderRadius:'8px',textAlign:'center',cursor:stats.pcStats.unrecorded>0?'pointer':'default'}}>
+                        <div style={{fontSize:'11px',color:'#64748b'}}>― 未記録</div>
+                        <div style={{fontSize:'20px',fontWeight:'700',color:stats.pcStats.unrecorded>0?'#dc2626':'#94a3b8',textDecoration:stats.pcStats.unrecorded>0?'underline':'none'}}>{stats.pcStats.unrecorded}</div>
+                      </div>
+                    </div>
+
+                    {/* 提案しなかった理由 */}
+                    {stats.pcStats.reasons.length > 0 && (
+                      <div style={{marginBottom:'10px'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+                          <span style={{fontSize:'12px',fontWeight:'600',color:'#92400e'}}>提案しなかった理由（件数順）</span>
+                          {stats.pcStats.reasons.length > 3 && (
+                            <button onClick={()=>setShowPcReasons(!showPcReasons)} style={{padding:'4px 10px',background:'#f1f5f9',border:'1px solid #e2e8f0',borderRadius:'6px',fontSize:'11px',color:'#64748b',cursor:'pointer'}}>
+                              {showPcReasons ? '▲ 閉じる' : `▼ 他${stats.pcStats.reasons.length - 3}件`}
+                            </button>
+                          )}
+                        </div>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                          {(showPcReasons ? stats.pcStats.reasons : stats.pcStats.reasons.slice(0,3)).map((n,idx)=>(
+                            <span key={n.reason} style={{padding:'4px 10px',background:idx===0?'#fde68a':'#fef3c7',color:'#92400e',borderRadius:'8px',fontSize:'12px',fontWeight:idx===0?'600':'400',border:idx===0?'1px solid #f59e0b':'none'}}>
+                              {idx===0?'🥇 ':idx===1?'🥈 ':idx===2?'🥉 ':''}{n.reason} <strong>{n.count}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 担当者別 提案率 */}
+                    {stats.pcStats.byStaff.length > 0 && (
+                      <div style={{borderTop:'1px solid #f1f5f9',paddingTop:'10px'}}>
+                        <button onClick={()=>setShowPcByStaff(!showPcByStaff)} style={{width:'100%',display:'flex',justifyContent:'space-between',alignItems:'center',background:'none',border:'none',padding:'4px 0',cursor:'pointer',fontSize:'12px',fontWeight:'600',color:'#374151'}}>
+                          <span>👥 担当者別 PC提案率（{stats.pcStats.byStaff.length}名）</span>
+                          <span style={{transform:showPcByStaff?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.2s',color:'#94a3b8'}}>▼</span>
+                        </button>
+                        {showPcByStaff && (
+                          <div style={{marginTop:'8px',display:'grid',gap:'4px',maxHeight:'260px',overflowY:'auto'}}>
+                            {stats.pcStats.byStaff.map(s=>(
+                              <div key={s.name} onClick={()=>setDetailModal({title:`${s.name} 訪問（PC提案 ${s.proposed}/${s.visits}）`,records:s.records})} style={{display:'flex',alignItems:'center',gap:'8px',padding:'6px 8px',borderRadius:'6px',background:'#f8fafc',cursor:'pointer'}}>
+                                <span style={{fontSize:'12px',width:'56px',flexShrink:0}}>{s.name}</span>
+                                <div style={{flex:1,height:'6px',background:'#e2e8f0',borderRadius:'3px',overflow:'hidden'}}>
+                                  <div style={{width:`${Math.min(Number(s.rate),100)}%`,height:'100%',background:Number(s.rate)>=100?'#059669':Number(s.rate)>=70?'#f59e0b':'#dc2626'}}></div>
+                                </div>
+                                <span style={{fontSize:'12px',fontWeight:'600',width:'46px',textAlign:'right',color:Number(s.rate)>=100?'#059669':Number(s.rate)>=70?'#d97706':'#dc2626'}}>{s.rate}%</span>
+                                <span style={{fontSize:'11px',color:'#94a3b8',width:'44px',textAlign:'right'}}>{s.proposed}/{s.visits}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* 顧客種別・ラクスルID */}
+              <div style={{background:'#fff',borderRadius:'12px',border:'1px solid #e2e8f0',padding:'16px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px',flexWrap:'wrap',gap:'8px'}}>
+                  <h3 style={{margin:0,fontSize:'14px',fontWeight:'600'}}>🆔 顧客種別とラクスルID</h3>
+                  <span style={{padding:'3px 10px',background:'#f1f5f9',color:'#64748b',borderRadius:'10px',fontSize:'11px'}}>全 {stats.totalVisits}件</span>
+                </div>
+
+                {stats.totalVisits === 0 ? (
+                  <div style={{padding:'24px',textAlign:'center',color:'#94a3b8',fontSize:'13px'}}>データがありません</div>
+                ) : (
+                  <>
+                    {/* 種別内訳 */}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'14px'}}>
+                      <div onClick={()=>stats.customerStats.newCount>0&&setDetailModal({title:'新規ユーザー',records:stats.customerStats.newRecords})} style={{padding:'10px',background:'#dcfce7',borderRadius:'8px',textAlign:'center',cursor:stats.customerStats.newCount>0?'pointer':'default'}}>
+                        <div style={{fontSize:'11px',color:'#166534'}}>🆕 新規</div>
+                        <div style={{fontSize:'20px',fontWeight:'700',color:'#059669',textDecoration:stats.customerStats.newCount>0?'underline':'none'}}>{stats.customerStats.newCount}</div>
+                      </div>
+                      <div onClick={()=>stats.customerStats.existingCount>0&&setDetailModal({title:'既存ユーザー',records:stats.customerStats.existingRecords})} style={{padding:'10px',background:'#eff6ff',borderRadius:'8px',textAlign:'center',cursor:stats.customerStats.existingCount>0?'pointer':'default'}}>
+                        <div style={{fontSize:'11px',color:'#1e40af'}}>📋 既存</div>
+                        <div style={{fontSize:'20px',fontWeight:'700',color:'#2563eb',textDecoration:stats.customerStats.existingCount>0?'underline':'none'}}>{stats.customerStats.existingCount}</div>
+                      </div>
+                      <div onClick={()=>stats.customerStats.unsetCount>0&&setDetailModal({title:'顧客種別 未設定',records:stats.customerStats.unsetTypeRecords})} style={{padding:'10px',background:stats.customerStats.unsetCount>0?'#fee2e2':'#f8fafc',borderRadius:'8px',textAlign:'center',cursor:stats.customerStats.unsetCount>0?'pointer':'default'}}>
+                        <div style={{fontSize:'11px',color:'#64748b'}}>― 未設定</div>
+                        <div style={{fontSize:'20px',fontWeight:'700',color:stats.customerStats.unsetCount>0?'#dc2626':'#94a3b8',textDecoration:stats.customerStats.unsetCount>0?'underline':'none'}}>{stats.customerStats.unsetCount}</div>
+                      </div>
+                    </div>
+
+                    {/* 新規：ID開設率 */}
+                    <div style={{marginBottom:'12px',padding:'12px',background:'#f8fafc',borderRadius:'8px'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'6px'}}>
+                        <span style={{fontSize:'12px',fontWeight:'600',color:'#166534'}}>🆕 新規のID開設率（原則例外なし＝100%）</span>
+                        <span style={{fontSize:'16px',fontWeight:'700',color:Number(stats.customerStats.newIdRate)>=100?'#059669':'#dc2626'}}>{stats.customerStats.newIdRate}%</span>
+                      </div>
+                      <div style={{height:'6px',background:'#e2e8f0',borderRadius:'3px',overflow:'hidden',marginBottom:'6px'}}>
+                        <div style={{width:`${Math.min(Number(stats.customerStats.newIdRate),100)}%`,height:'100%',background:Number(stats.customerStats.newIdRate)>=100?'#059669':'#dc2626'}}></div>
+                      </div>
+                      <div style={{display:'flex',gap:'8px',fontSize:'11px'}}>
+                        <span onClick={()=>stats.customerStats.newIdOpened>0&&setDetailModal({title:'新規：ID開設済み',records:stats.customerStats.newIdOpenedRecords})} style={{color:'#059669',cursor:stats.customerStats.newIdOpened>0?'pointer':'default',textDecoration:stats.customerStats.newIdOpened>0?'underline':'none'}}>開設 {stats.customerStats.newIdOpened}件</span>
+                        <span onClick={()=>stats.customerStats.newIdMissing>0&&setDetailModal({title:'⚠️ 新規：ID未開設',records:stats.customerStats.newIdMissingRecords})} style={{color:stats.customerStats.newIdMissing>0?'#dc2626':'#94a3b8',fontWeight:stats.customerStats.newIdMissing>0?'600':'400',cursor:stats.customerStats.newIdMissing>0?'pointer':'default',textDecoration:stats.customerStats.newIdMissing>0?'underline':'none'}}>未開設 {stats.customerStats.newIdMissing}件</span>
+                      </div>
+                    </div>
+
+                    {/* 既存：ID記録率 */}
+                    <div style={{padding:'12px',background:'#f8fafc',borderRadius:'8px'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'6px'}}>
+                        <span style={{fontSize:'12px',fontWeight:'600',color:'#1e40af'}}>📋 既存のID確認・記録率</span>
+                        <span style={{fontSize:'16px',fontWeight:'700',color:Number(stats.customerStats.existingIdRate)>=100?'#2563eb':'#dc2626'}}>{stats.customerStats.existingIdRate}%</span>
+                      </div>
+                      <div style={{height:'6px',background:'#e2e8f0',borderRadius:'3px',overflow:'hidden',marginBottom:'6px'}}>
+                        <div style={{width:`${Math.min(Number(stats.customerStats.existingIdRate),100)}%`,height:'100%',background:Number(stats.customerStats.existingIdRate)>=100?'#2563eb':'#dc2626'}}></div>
+                      </div>
+                      <div style={{display:'flex',gap:'8px',fontSize:'11px'}}>
+                        <span onClick={()=>stats.customerStats.existingIdRecorded>0&&setDetailModal({title:'既存：ID記録済み',records:stats.customerStats.existingIdRecordedRecords})} style={{color:'#2563eb',cursor:stats.customerStats.existingIdRecorded>0?'pointer':'default',textDecoration:stats.customerStats.existingIdRecorded>0?'underline':'none'}}>記録済 {stats.customerStats.existingIdRecorded}件</span>
+                        <span onClick={()=>stats.customerStats.existingIdMissing>0&&setDetailModal({title:'⚠️ 既存：ID未記録',records:stats.customerStats.existingIdMissingRecords})} style={{color:stats.customerStats.existingIdMissing>0?'#dc2626':'#94a3b8',fontWeight:stats.customerStats.existingIdMissing>0?'600':'400',cursor:stats.customerStats.existingIdMissing>0?'pointer':'default',textDecoration:stats.customerStats.existingIdMissing>0?'underline':'none'}}>未記録 {stats.customerStats.existingIdMissing}件</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* 個人ランキング - 一旦非表示 */}
@@ -1388,23 +1632,49 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+                {/* 訪問時のPC提案 */}
+                {formData.sales_method === '訪問' && (
+                  <div style={{marginTop:'10px',paddingLeft:'16px',borderLeft:!formData.pc_proposal?'3px solid #dc2626':'3px solid #059669',background:!formData.pc_proposal?'#fef2f2':'transparent',padding:!formData.pc_proposal?'10px 10px 10px 16px':'0 0 0 16px',borderRadius:!formData.pc_proposal?'0 8px 8px 0':'0'}}>
+                    <div style={{fontSize:'12px',color:!formData.pc_proposal?'#dc2626':'#64748b',marginBottom:'6px'}}>💻 PC提案<span style={{color:'#dc2626',marginLeft:'4px'}}>*必須</span></div>
+                    <div style={{display:'flex',gap:'8px'}}>
+                      <button type="button" onClick={()=>setFormData({...formData,pc_proposal:'提案した',pc_not_proposed_reason:''})} style={{padding:'8px 16px',borderRadius:'6px',border:formData.pc_proposal==='提案した'?'2px solid #059669':'1px solid #e2e8f0',background:formData.pc_proposal==='提案した'?'#dcfce7':'#fff',color:formData.pc_proposal==='提案した'?'#059669':'#64748b',fontSize:'12px',fontWeight:formData.pc_proposal==='提案した'?'600':'400',cursor:'pointer'}}>✓ 提案した</button>
+                      <button type="button" onClick={()=>setFormData({...formData,pc_proposal:'提案しなかった'})} style={{padding:'8px 16px',borderRadius:'6px',border:formData.pc_proposal==='提案しなかった'?'2px solid #f59e0b':'1px solid #e2e8f0',background:formData.pc_proposal==='提案しなかった'?'#fef3c7':'#fff',color:formData.pc_proposal==='提案しなかった'?'#b45309':'#64748b',fontSize:'12px',fontWeight:formData.pc_proposal==='提案しなかった'?'600':'400',cursor:'pointer'}}>✗ 提案しなかった</button>
+                    </div>
+                    {formData.pc_proposal === '提案しなかった' && (
+                      <div style={{marginTop:'8px'}}>
+                        <input type="text" placeholder="提案しなかった理由を入力" value={formData.pc_not_proposed_reason} onChange={e=>setFormData({...formData,pc_not_proposed_reason:e.target.value})} style={{width:'100%',padding:'10px',borderRadius:'6px',border:'2px solid #f59e0b',fontSize:'13px',boxSizing:'border-box',background:'#fffbeb'}} />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* ラクスルID・メール */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
-                <div>
-                  <label style={{fontSize:'13px',color:'#374151',fontWeight:'500',display:'block',marginBottom:'6px'}}>ラクスルID</label>
-                  <select value={formData.raksul_id_status} onChange={e=>setFormData({...formData,raksul_id_status:e.target.value})} style={{width:'100%',padding:'12px',borderRadius:'8px',border:'1px solid #e2e8f0',fontSize:'14px',background:'#fff'}}>
-                    {ID_STATUS_LIST.map(s=><option key={s} value={s}>{s}</option>)}
-                  </select>
+              {/* 顧客種別 */}
+              <div style={{background:'linear-gradient(135deg,#6366f115,#818cf815)',padding:'16px',borderRadius:'12px',border:'2px solid #6366f1'}}>
+                <label style={{fontSize:'14px',color:'#4f46e5',fontWeight:'700',display:'block',marginBottom:'10px'}}>🆔 顧客種別・ラクスルID<span style={{color:'#dc2626',marginLeft:'4px'}}>*必須</span></label>
+                <div style={{display:'flex',gap:'10px',marginBottom:'12px'}}>
+                  <button type="button" onClick={()=>setFormData({...formData,customer_type:'新規',raksul_id_status:'-',existing_raksul_id:''})} style={{flex:1,padding:'14px',borderRadius:'8px',border:formData.customer_type==='新規'?'2px solid #059669':'1px solid #e2e8f0',background:formData.customer_type==='新規'?'#dcfce7':'#fff',color:formData.customer_type==='新規'?'#059669':'#64748b',fontSize:'14px',fontWeight:formData.customer_type==='新規'?'700':'400',cursor:'pointer'}}>🆕 新規ユーザー</button>
+                  <button type="button" onClick={()=>setFormData({...formData,customer_type:'既存',raksul_id_status:'-',raksul_email:''})} style={{flex:1,padding:'14px',borderRadius:'8px',border:formData.customer_type==='既存'?'2px solid #2563eb':'1px solid #e2e8f0',background:formData.customer_type==='既存'?'#eff6ff':'#fff',color:formData.customer_type==='既存'?'#2563eb':'#64748b',fontSize:'14px',fontWeight:formData.customer_type==='既存'?'700':'400',cursor:'pointer'}}>📋 既存ユーザー</button>
                 </div>
-                <div>
-                  <label style={{fontSize:'13px',color:'#374151',fontWeight:'500',display:'block',marginBottom:'6px'}}>
-                    メール
-                    {(formData.raksul_id_status === '提案⇒開設' || formData.raksul_id_status === '開設済') && <span style={{color:'#dc2626',marginLeft:'4px'}}>*必須</span>}
-                  </label>
-                  <input type="email" value={formData.raksul_email} onChange={e=>setFormData({...formData,raksul_email:e.target.value})} style={{width:'100%',padding:'12px',borderRadius:'8px',border:(formData.raksul_id_status === '提案⇒開設' || formData.raksul_id_status === '開設済')?'2px solid #fca5a5':'1px solid #e2e8f0',fontSize:'14px',boxSizing:'border-box',background:(formData.raksul_id_status === '提案⇒開設' || formData.raksul_id_status === '開設済')?'#fef2f2':'#fff'}}/>
-                </div>
+                
+                {/* 新規ユーザーの場合：ID登録必須 */}
+                {formData.customer_type === '新規' && (
+                  <div style={{padding:'12px',background:'#fff',borderRadius:'8px',border:'1px solid #dcfce7'}}>
+                    <div style={{fontSize:'12px',color:'#059669',fontWeight:'600',marginBottom:'8px'}}>⚠️ 新規ユーザーはラクスルID登録が必須です</div>
+                    <button type="button" onClick={()=>setFormData({...formData,raksul_id_status:formData.raksul_id_status==='提案⇒開設'?'-':'提案⇒開設'})} style={{width:'100%',padding:'12px',borderRadius:'8px',border:formData.raksul_id_status==='提案⇒開設'?'2px solid #059669':'2px solid #dc2626',background:formData.raksul_id_status==='提案⇒開設'?'#dcfce7':'#fef2f2',color:formData.raksul_id_status==='提案⇒開設'?'#059669':'#dc2626',fontSize:'14px',fontWeight:'700',cursor:'pointer',marginBottom:'10px'}}>{formData.raksul_id_status==='提案⇒開設'?'✓ ID登録完了':'ID登録をタップして確認'}</button>
+                    {formData.raksul_id_status === '提案⇒開設' && (
+                      <input type="email" placeholder="登録メールアドレス *必須" value={formData.raksul_email} onChange={e=>setFormData({...formData,raksul_email:e.target.value})} style={{width:'100%',padding:'12px',borderRadius:'8px',border:'1px solid #e2e8f0',fontSize:'14px',boxSizing:'border-box'}} />
+                    )}
+                  </div>
+                )}
+                
+                {/* 既存ユーザーの場合：ID確認・記録 */}
+                {formData.customer_type === '既存' && (
+                  <div style={{padding:'12px',background:'#fff',borderRadius:'8px',border:'1px solid #dbeafe'}}>
+                    <div style={{fontSize:'12px',color:'#2563eb',fontWeight:'600',marginBottom:'8px'}}>📝 ラクスルIDを確認・記録してください</div>
+                    <input type="text" placeholder="ラクスルID（メールアドレス）を入力 *必須" value={formData.existing_raksul_id} onChange={e=>setFormData({...formData,existing_raksul_id:e.target.value})} style={{width:'100%',padding:'12px',borderRadius:'8px',border:'1px solid #e2e8f0',fontSize:'14px',boxSizing:'border-box'}} />
+                  </div>
+                )}
               </div>
 
               {/* 提案タイミング */}
@@ -1696,6 +1966,8 @@ export default function App() {
                       <th style={{padding:'10px 8px',textAlign:'left'}}>担当者</th>
                       <th style={{padding:'10px 8px',textAlign:'left'}}>事務所</th>
                       <th style={{padding:'10px 8px',textAlign:'left'}}>方法</th>
+                      <th style={{padding:'10px 8px',textAlign:'left'}}>種別</th>
+                      <th style={{padding:'10px 8px',textAlign:'left'}}>PC提案</th>
                       <th style={{padding:'10px 8px',textAlign:'left'}}>タイミング</th>
                     </tr>
                   </thead>
@@ -1707,6 +1979,8 @@ export default function App() {
                         <td style={{padding:'10px 8px'}}>{r.staff}</td>
                         <td style={{padding:'10px 8px'}}><span style={{padding:'2px 8px',background:'#e0f2fe',color:'#0369a1',borderRadius:'4px',fontSize:'11px'}}>{r.office}</span></td>
                         <td style={{padding:'10px 8px'}}><span style={{padding:'2px 8px',background:r.sales_method==='訪問'?'#dcfce7':'#fae8ff',color:r.sales_method==='訪問'?'#166534':'#86198f',borderRadius:'4px',fontSize:'11px'}}>{r.sales_method==='訪問'?'🚗訪問':r.sales_method==='遠隔'?'💻遠隔':'-'}</span></td>
+                        <td style={{padding:'10px 8px'}}><span style={{padding:'2px 8px',background:r.customer_type==='新規'?'#dcfce7':r.customer_type==='既存'?'#eff6ff':'#f1f5f9',color:r.customer_type==='新規'?'#166534':r.customer_type==='既存'?'#1e40af':'#94a3b8',borderRadius:'4px',fontSize:'11px'}}>{r.customer_type || '-'}</span></td>
+                        <td style={{padding:'10px 8px'}}><span style={{padding:'2px 8px',background:r.pc_proposal==='提案した'?'#dcfce7':r.pc_proposal==='提案しなかった'?'#fef3c7':'#f1f5f9',color:r.pc_proposal==='提案した'?'#166534':r.pc_proposal==='提案しなかった'?'#92400e':'#94a3b8',borderRadius:'4px',fontSize:'11px'}}>{r.pc_proposal==='提案した'?'✓ あり':r.pc_proposal==='提案しなかった'?'✗ なし':'-'}</span></td>
                         <td style={{padding:'10px 8px'}}><span style={{padding:'2px 8px',background:'#fef3c7',color:'#92400e',borderRadius:'4px',fontSize:'11px'}}>{r.timing || '-'}</span></td>
                       </tr>
                     ))}
