@@ -1591,8 +1591,8 @@ export default function App() {
                 {formData.sales_source === 'ラクスルリスト' && (
                   <div style={{marginTop:'10px',paddingLeft:'16px',borderLeft:'3px solid #2563eb'}}>
                     <div style={{fontSize:'12px',color:'#64748b',marginBottom:'6px'}}>エリア選択<span style={{color:'#dc2626',marginLeft:'4px'}}>*必須</span></div>
-                    <div style={{display:'flex',gap:'8px'}}>
-                      {['沖縄', '四国', '中国'].map(area => (
+                    <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                      {['沖縄', '四国', '中国', '関西'].map(area => (
                         <button 
                           key={area}
                           type="button" 
