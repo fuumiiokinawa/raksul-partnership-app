@@ -692,19 +692,50 @@ export default function App() {
       return { ...p, proposed, contracts, tossups, ngs, proposalRate: totalVisits > 0 ? (proposed/totalVisits*100).toFixed(1) : '0', contractRate: proposed > 0 ? (contracts/proposed*100).toFixed(1) : '0', tossupRate: proposed > 0 ? (tossups/proposed*100).toFixed(1) : '0' };
     }).filter(p => p.proposed > 0 || p.contracts > 0 || p.tossups > 0 || p.ngs > 0);
     const totalIncentive = baseFilteredRecords.reduce((sum, r) => sum + calcIncentive(r), 0);
+
+    // 表に出す商材（商材フィルタ時はその商材のみ、通常は現行商材のみ）
+    const rateProducts = filterProduct ? ALL_PRODUCTS.filter(p => p.id === filterProduct) : PRODUCTS;
+
+    // ID取得の判定（新規=開設、既存=ID記録済、種別未設定の過去データ=開設で判定）
+    const hasId = (r) => {
+      const opened = r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済';
+      if (r.customer_type === '既存') return !!r.existing_raksul_id;
+      if (r.customer_type === '新規') return opened;
+      return opened;
+    };
+
+    // 担当者・事務所に共通する行動指標
+    const groupMetrics = (rs) => {
+      const pcTargetRecords = rs.filter(r => r.sales_method === '訪問');
+      const pcDoneRecords = pcTargetRecords.filter(r => r.pc_proposal === '提案した');
+      const idDoneRecords = rs.filter(hasId);
+      return {
+        pcTarget: pcTargetRecords.length,
+        pcDone: pcDoneRecords.length,
+        pcRate: pcTargetRecords.length > 0 ? (pcDoneRecords.length / pcTargetRecords.length * 100).toFixed(1) : null,
+        pcTargetRecords, pcDoneRecords,
+        idDone: idDoneRecords.length,
+        idRate: rs.length > 0 ? (idDoneRecords.length / rs.length * 100).toFixed(1) : '0',
+        idDoneRecords,
+        productRates: rateProducts.map(p => {
+          const pr = rs.filter(r => r[`proposal_${p.id}`] === '○');
+          return { id: p.id, name: p.name, color: p.color, proposed: pr.length, rate: rs.length > 0 ? (pr.length / rs.length * 100).toFixed(1) : '0', records: pr };
+        })
+      };
+    };
     const staffStats = ALL_STAFF.map(s => {
       const sr = baseFilteredRecords.filter(r => r.staff === s);
       const proposed = targetProducts.reduce((sum, p) => sum + sr.filter(r => r[`proposal_${p.id}`] === '○').length, 0);
       const tossups = targetProducts.reduce((sum, p) => sum + sr.filter(r => r[`result_${p.id}`] === 'トスアップ').length, 0);
       const contracts = targetProducts.reduce((sum, p) => sum + sr.filter(r => r[`result_${p.id}`] === '契約').length, 0);
-      return { name: s, visits: sr.length, ids: sr.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済').length, proposed, tossups, contracts, proposalRate: sr.length > 0 ? (proposed / sr.length * 100).toFixed(1) : '0', tossupRate: proposed > 0 ? (tossups/proposed*100).toFixed(1) : '0', contractRate: proposed > 0 ? (contracts/proposed*100).toFixed(1) : '0', incentive: sr.reduce((sum,r) => sum + calcIncentive(r), 0) };
+      return { ...groupMetrics(sr), name: s, visits: sr.length, ids: sr.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済').length, proposed, tossups, contracts, proposalRate: sr.length > 0 ? (proposed / sr.length * 100).toFixed(1) : '0', tossupRate: proposed > 0 ? (tossups/proposed*100).toFixed(1) : '0', contractRate: proposed > 0 ? (contracts/proposed*100).toFixed(1) : '0', incentive: sr.reduce((sum,r) => sum + calcIncentive(r), 0) };
     }).filter(s => s.visits > 0);
     const officeStats = OFFICE_LIST.map(o => {
       const or = baseFilteredRecords.filter(r => r.office === o);
       const proposed = targetProducts.reduce((sum, p) => sum + or.filter(r => r[`proposal_${p.id}`] === '○').length, 0);
       const tossups = targetProducts.reduce((sum, p) => sum + or.filter(r => r[`result_${p.id}`] === 'トスアップ').length, 0);
       const contracts = targetProducts.reduce((sum, p) => sum + or.filter(r => r[`result_${p.id}`] === '契約').length, 0);
-      return { name: o, visits: or.length, ids: or.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済').length, proposed, tossups, contracts, proposalRate: or.length > 0 ? (proposed / or.length * 100).toFixed(1) : '0', tossupRate: proposed > 0 ? (tossups/proposed*100).toFixed(1) : '0', contractRate: proposed > 0 ? (contracts/proposed*100).toFixed(1) : '0', incentive: or.reduce((sum,r) => sum + calcIncentive(r), 0) };
+      return { ...groupMetrics(or), name: o, visits: or.length, ids: or.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済').length, proposed, tossups, contracts, proposalRate: or.length > 0 ? (proposed / or.length * 100).toFixed(1) : '0', tossupRate: proposed > 0 ? (tossups/proposed*100).toFixed(1) : '0', contractRate: proposed > 0 ? (contracts/proposed*100).toFixed(1) : '0', incentive: or.reduce((sum,r) => sum + calcIncentive(r), 0) };
     }).filter(o => o.visits > 0);
     const ngStatsByProduct = ALL_PRODUCTS.map(p => {
       const reasons = baseFilteredRecords.map(r => r[`ng_${p.id}`]).filter(Boolean);
@@ -774,8 +805,99 @@ export default function App() {
       idMissingReasons: Object.entries(idMissingReasonCounts).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count)
     };
 
-    return { totalVisits, idOpened, totalTossups, productStats, staffStats, officeStats, totalIncentive, ngStatsByProduct, videoOrdered, pcStats, customerStats };
+    return { totalVisits, idOpened, totalTossups, productStats, staffStats, officeStats, totalIncentive, ngStatsByProduct, videoOrdered, pcStats, customerStats, rateProducts, groupMetrics };
   }, [filterProduct, baseFilteredRecords]);
+
+  // ===== 分析テーブル用ヘルパー =====
+  const rateColor = (v) => (v === null || v === undefined) ? '#94a3b8' : (Number(v) >= 80 ? '#059669' : Number(v) >= 50 ? '#d97706' : '#dc2626');
+  const rateBg = (v) => (v === null || v === undefined) ? '#f8fafc' : (Number(v) >= 80 ? '#dcfce7' : Number(v) >= 50 ? '#fef3c7' : '#fee2e2');
+
+  function RateCell({ rate, sub, title, records, dark }) {
+    const clickable = records && records.length > 0;
+    return (
+      <td onClick={()=>clickable&&setDetailModal({title, records})}
+          style={{padding:'10px 8px',textAlign:'center',background:dark?'transparent':rateBg(rate),cursor:clickable?'pointer':'default'}}>
+        <div style={{fontSize:'14px',fontWeight:'700',color:dark?'#fff':rateColor(rate)}}>{(rate === null || rate === undefined) ? '\u2013' : `${rate}%`}</div>
+        {sub && <div style={{fontSize:'10px',color:dark?'#cbd5e1':'#64748b',marginTop:'2px'}}>{sub}</div>}
+      </td>
+    );
+  }
+
+  function CountCell({ count, sub, title, records, color, dark }) {
+    const clickable = records && records.length > 0;
+    return (
+      <td onClick={()=>clickable&&setDetailModal({title, records})}
+          style={{padding:'10px 8px',textAlign:'center',cursor:clickable?'pointer':'default'}}>
+        <div style={{fontSize:'14px',fontWeight:'700',color:dark?'#fff':(color||'#1e293b'),textDecoration:clickable?'underline':'none'}}>{count}</div>
+        {sub && <div style={{fontSize:'10px',color:dark?'#cbd5e1':'#94a3b8',marginTop:'2px'}}>{sub}</div>}
+      </td>
+    );
+  }
+
+  // 担当者別／事務所別の分析テーブル
+  function renderGroupTable(rows, headLabel, field) {
+    const rp = stats.rateProducts;
+    const totals = stats.groupMetrics(baseFilteredRecords);
+    const tProducts = filterProduct ? ALL_PRODUCTS.filter(p => p.id === filterProduct) : ALL_PRODUCTS;
+    const tVisits = rows.reduce((a,r)=>a+r.visits,0);
+    const tTossups = rows.reduce((a,r)=>a+r.tossups,0);
+    const tContracts = rows.reduce((a,r)=>a+r.contracts,0);
+    const tProposed = rows.reduce((a,r)=>a+r.proposed,0);
+    const tIncentive = rows.reduce((a,r)=>a+r.incentive,0);
+    return (
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px'}}>
+          <thead><tr style={{borderBottom:'2px solid #e2e8f0',background:'#f8fafc'}}>
+            <th style={{padding:'12px 8px',textAlign:'left',whiteSpace:'nowrap'}}>{headLabel}</th>
+            <th style={{padding:'12px 8px',textAlign:'center',whiteSpace:'nowrap'}}>訪問</th>
+            <th style={{padding:'12px 8px',textAlign:'center',whiteSpace:'nowrap'}}>💻PC提案率</th>
+            <th style={{padding:'12px 8px',textAlign:'center',whiteSpace:'nowrap'}}>🆔ID取得率</th>
+            {rp.map(p=><th key={p.id} style={{padding:'12px 8px',textAlign:'center',whiteSpace:'nowrap'}}>{p.name}提案率</th>)}
+            <th style={{padding:'12px 8px',textAlign:'center',whiteSpace:'nowrap'}}>トスアップ</th>
+            <th style={{padding:'12px 8px',textAlign:'center',whiteSpace:'nowrap'}}>契約</th>
+            <th style={{padding:'12px 8px',textAlign:'center',whiteSpace:'nowrap'}}>報酬</th>
+          </tr></thead>
+          <tbody>
+            {rows.map(row=>{
+              const groupRecords = baseFilteredRecords.filter(r => r[field] === row.name);
+              const tossupRecords = groupRecords.filter(r => tProducts.some(p => r[`result_${p.id}`] === 'トスアップ'));
+              const contractRecords = groupRecords.filter(r => tProducts.some(p => r[`result_${p.id}`] === '契約'));
+              return (
+                <tr key={row.name} style={{borderBottom:'1px solid #f1f5f9'}}>
+                  <td style={{padding:'10px 8px',fontWeight:'600',whiteSpace:'nowrap'}}>{row.name}</td>
+                  <CountCell count={row.visits} title={`${row.name} 訪問`} records={groupRecords} />
+                  <RateCell rate={row.pcRate} sub={row.pcTarget>0?`${row.pcDone}/${row.pcTarget}`:'訪問なし'} title={`${row.name} PC提案あり`} records={row.pcDoneRecords} />
+                  <RateCell rate={row.idRate} sub={`${row.idDone}/${row.visits}`} title={`${row.name} ID取得`} records={row.idDoneRecords} />
+                  {row.productRates.map(pr=>(
+                    <RateCell key={pr.id} rate={pr.rate} sub={`${pr.proposed}件`} title={`${row.name} ${pr.name}提案`} records={pr.records} />
+                  ))}
+                  <CountCell count={row.tossups} sub={`${row.tossupRate}%`} title={`${row.name} トスアップ`} records={tossupRecords} color="#1e40af" />
+                  <CountCell count={row.contracts} sub={`成約 ${row.contractRate}%`} title={`${row.name} 契約`} records={contractRecords} color="#059669" />
+                  <td style={{padding:'10px 8px',textAlign:'center',fontWeight:'700',color:'#059669',whiteSpace:'nowrap'}}>¥{row.incentive.toLocaleString()}</td>
+                </tr>
+              );
+            })}
+            {/* 合計行 */}
+            <tr style={{borderTop:'2px solid #1e293b',background:'#1e293b',color:'#fff'}}>
+              <td style={{padding:'10px 8px',fontWeight:'700'}}>合計</td>
+              <CountCell dark count={tVisits} title="全体 訪問" records={baseFilteredRecords} />
+              <RateCell dark rate={totals.pcRate} sub={totals.pcTarget>0?`${totals.pcDone}/${totals.pcTarget}`:'訪問なし'} title="全体 PC提案あり" records={totals.pcDoneRecords} />
+              <RateCell dark rate={totals.idRate} sub={`${totals.idDone}/${tVisits}`} title="全体 ID取得" records={totals.idDoneRecords} />
+              {totals.productRates.map(pr=>(
+                <RateCell key={pr.id} dark rate={pr.rate} sub={`${pr.proposed}件`} title={`全体 ${pr.name}提案`} records={pr.records} />
+              ))}
+              <CountCell dark count={tTossups} sub={tProposed>0?`${(tTossups/tProposed*100).toFixed(1)}%`:'0%'} title="全体 トスアップ" records={baseFilteredRecords.filter(r => tProducts.some(p => r[`result_${p.id}`] === 'トスアップ'))} />
+              <CountCell dark count={tContracts} sub={tProposed>0?`成約 ${(tContracts/tProposed*100).toFixed(1)}%`:'成約 0%'} title="全体 契約" records={baseFilteredRecords.filter(r => tProducts.some(p => r[`result_${p.id}`] === '契約'))} />
+              <td style={{padding:'10px 8px',textAlign:'center',fontWeight:'700'}}>¥{tIncentive.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style={{marginTop:'8px',fontSize:'11px',color:'#94a3b8'}}>
+          ※ PC提案率は「訪問」した記録のみが母数です（遠隔は対象外）。ID取得率は新規のID開設と既存のID記録を合算した割合です。数字をタップすると該当企業を確認できます。
+        </div>
+      </div>
+    );
+  }
 
   function exportCSV() {
     const h = ['訪問日','担当者','企業名','業種','事務所','営業先','商談方法','顧客種別','PC提案','PC未提案理由','提案タイミング','ID状態','メールアドレス','既存ID','ID未入力理由','バンク提案','ペイ提案','モール提案','MEO提案','動画提案','バンク結果','ペイ結果','モール結果','MEO結果','動画結果','バンクNG','ペイNG','モールNG','MEONG','動画NG','モール未購入理由','ID未開設理由','動画申込','報酬','備考'];
@@ -1116,7 +1238,7 @@ export default function App() {
                     <thead><tr style={{borderBottom:'2px solid #e2e8f0',background:'#f8fafc'}}>
                       <th style={{padding:'12px 8px',textAlign:'left'}}>商材</th>
                       <th style={{padding:'12px 8px',textAlign:'center'}}>提案</th>
-                      <th style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff'}}>提案率</th>
+                      <th style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',whiteSpace:'nowrap'}}>提案率<div style={{fontSize:'10px',fontWeight:'400',color:'#64748b'}}>対訪問</div></th>
                       <th style={{padding:'12px 8px',textAlign:'center'}}>契約</th>
                       <th style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7'}}>成約率</th>
                       <th style={{padding:'12px 8px',textAlign:'center'}}>トスアップ</th>
@@ -1124,6 +1246,13 @@ export default function App() {
                       <th style={{padding:'12px 8px',textAlign:'center'}}>NG</th>
                     </tr></thead>
                     <tbody>
+                      {/* PC提案（母数は訪問のみ） */}
+                      <tr style={{borderBottom:'1px solid #f1f5f9',background:'#fafafa'}}>
+                        <td style={{padding:'12px 8px'}}><span style={{padding:'4px 10px',borderRadius:'6px',background:'#64748b15',color:'#475569',fontWeight:'600'}}>💻 PC</span></td>
+                        <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',cursor:stats.pcStats.proposed>0?'pointer':'default',textDecoration:stats.pcStats.proposed>0?'underline':'none'}} onClick={()=>stats.pcStats.proposed>0&&setDetailModal({title:'PC提案あり',records:stats.pcStats.proposedRecords})}>{stats.pcStats.proposed}</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:rateColor(stats.pcStats.targetVisits>0?stats.pcStats.rate:null)}}>{stats.pcStats.targetVisits>0?`${stats.pcStats.rate}%`:'\u2013'}</td>
+                        <td colSpan={5} style={{padding:'12px 8px',textAlign:'center',color:'#94a3b8',fontSize:'11px'}}>提案有無のみ記録（母数は訪問{stats.pcStats.targetVisits}件）</td>
+                      </tr>
                       {stats.productStats.map(p=>{
                         const proposedRecords = baseFilteredRecords.filter(r => r[`proposal_${p.id}`] === '○');
                         const contractRecords = baseFilteredRecords.filter(r => r[`result_${p.id}`] === '契約');
@@ -1169,158 +1298,15 @@ export default function App() {
                       })()}
                     </tbody>
                   </table>
+                  <div style={{marginTop:'8px',fontSize:'11px',color:'#94a3b8'}}>
+                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外）。成約率・トスアップ率は提案数に対する割合です。
+                  </div>
                 </div>
               )}
 
-              {analysisView==='staff' && (
-                <div style={{overflowX:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px'}}>
-                    <thead><tr style={{borderBottom:'2px solid #e2e8f0',background:'#f8fafc'}}>
-                      <th style={{padding:'12px 8px',textAlign:'left'}}>担当者</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>訪問</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>提案</th>
-                      <th style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff'}}>提案率</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>契約</th>
-                      <th style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7'}}>成約率</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>トスアップ</th>
-                      <th style={{padding:'12px 8px',textAlign:'center',background:'#dbeafe'}}>トスアップ率</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>ID開設</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>報酬</th>
-                    </tr></thead>
-                    <tbody>
-                      {stats.staffStats.map(s=>{
-                        const staffRecords = baseFilteredRecords.filter(r => r.staff === s.name);
-                        const targetProducts = filterProduct ? ALL_PRODUCTS.filter(p => p.id === filterProduct) : ALL_PRODUCTS;
-                        const visitRecords = staffRecords;
-                        const proposedRecords = staffRecords.filter(r => targetProducts.some(p => r[`proposal_${p.id}`] === '○'));
-                        const contractRecords = staffRecords.filter(r => targetProducts.some(p => r[`result_${p.id}`] === '契約'));
-                        const tossupRecords = staffRecords.filter(r => targetProducts.some(p => r[`result_${p.id}`] === 'トスアップ'));
-                        const idRecords = staffRecords.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済');
-                        return (
-                        <tr key={s.name} style={{borderBottom:'1px solid #f1f5f9'}}>
-                          <td style={{padding:'12px 8px',fontWeight:'600'}}>{s.name}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',cursor:s.visits>0?'pointer':'default',textDecoration:s.visits>0?'underline':'none'}} onClick={()=>s.visits>0&&setDetailModal({title:`${s.name} 訪問`,records:visitRecords})}>{s.visits}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',cursor:s.proposed>0?'pointer':'default',textDecoration:s.proposed>0?'underline':'none'}} onClick={()=>s.proposed>0&&setDetailModal({title:`${s.name} 提案`,records:proposedRecords})}>{s.proposed}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:'#2563eb'}}>{s.proposalRate}%</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#059669',cursor:s.contracts>0?'pointer':'default',textDecoration:s.contracts>0?'underline':'none'}} onClick={()=>s.contracts>0&&setDetailModal({title:`${s.name} 契約`,records:contractRecords})}>{s.contracts}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7',fontWeight:'700',color:'#059669'}}>{s.contractRate}%</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#1e40af',cursor:s.tossups>0?'pointer':'default',textDecoration:s.tossups>0?'underline':'none'}} onClick={()=>s.tossups>0&&setDetailModal({title:`${s.name} トスアップ`,records:tossupRecords})}>{s.tossups}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',background:'#dbeafe',fontWeight:'700',color:'#1e40af'}}>{s.tossupRate}%</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',cursor:s.ids>0?'pointer':'default',textDecoration:s.ids>0?'underline':'none'}} onClick={()=>s.ids>0&&setDetailModal({title:`${s.name} ID開設`,records:idRecords})}>{s.ids}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',color:'#059669'}}>¥{s.incentive.toLocaleString()}</td>
-                        </tr>
-                      );})}
-                      {/* 合計行 */}
-                      {(() => {
-                        const totalVisits = stats.staffStats.reduce((sum, s) => sum + s.visits, 0);
-                        const totalProposed = stats.staffStats.reduce((sum, s) => sum + s.proposed, 0);
-                        const totalContracts = stats.staffStats.reduce((sum, s) => sum + s.contracts, 0);
-                        const totalTossups = stats.staffStats.reduce((sum, s) => sum + s.tossups, 0);
-                        const totalIds = stats.staffStats.reduce((sum, s) => sum + s.ids, 0);
-                        const totalIncentive = stats.staffStats.reduce((sum, s) => sum + s.incentive, 0);
-                        const avgProposalRate = totalVisits > 0 ? (totalProposed / totalVisits * 100).toFixed(1) : '0';
-                        const avgContractRate = totalProposed > 0 ? (totalContracts / totalProposed * 100).toFixed(1) : '0';
-                        const avgTossupRate = totalProposed > 0 ? (totalTossups / totalProposed * 100).toFixed(1) : '0';
-                        const targetProducts = filterProduct ? ALL_PRODUCTS.filter(p => p.id === filterProduct) : ALL_PRODUCTS;
-                        const allVisitRecords = baseFilteredRecords;
-                        const allProposedRecords = baseFilteredRecords.filter(r => targetProducts.some(p => r[`proposal_${p.id}`] === '○'));
-                        const allContractRecords = baseFilteredRecords.filter(r => targetProducts.some(p => r[`result_${p.id}`] === '契約'));
-                        const allTossupRecords = baseFilteredRecords.filter(r => targetProducts.some(p => r[`result_${p.id}`] === 'トスアップ'));
-                        const allIdRecords = baseFilteredRecords.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済');
-                        return (
-                          <tr style={{borderTop:'2px solid #1e293b',background:'#1e293b',color:'#fff'}}>
-                            <td style={{padding:'12px 8px',fontWeight:'700'}}>合計</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalVisits>0?'pointer':'default',textDecoration:totalVisits>0?'underline':'none'}} onClick={()=>totalVisits>0&&setDetailModal({title:'全体 訪問',records:allVisitRecords})}>{totalVisits}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalProposed>0?'pointer':'default',textDecoration:totalProposed>0?'underline':'none'}} onClick={()=>totalProposed>0&&setDetailModal({title:'全体 提案',records:allProposedRecords})}>{totalProposed}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700'}}>{avgProposalRate}%</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalContracts>0?'pointer':'default',textDecoration:totalContracts>0?'underline':'none'}} onClick={()=>totalContracts>0&&setDetailModal({title:'全体 契約',records:allContractRecords})}>{totalContracts}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700'}}>{avgContractRate}%</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalTossups>0?'pointer':'default',textDecoration:totalTossups>0?'underline':'none'}} onClick={()=>totalTossups>0&&setDetailModal({title:'全体 トスアップ',records:allTossupRecords})}>{totalTossups}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700'}}>{avgTossupRate}%</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalIds>0?'pointer':'default',textDecoration:totalIds>0?'underline':'none'}} onClick={()=>totalIds>0&&setDetailModal({title:'全体 ID開設',records:allIdRecords})}>{totalIds}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700'}}>¥{totalIncentive.toLocaleString()}</td>
-                          </tr>
-                        );
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {analysisView==='staff' && renderGroupTable(stats.staffStats, '担当者', 'staff')}
 
-              {analysisView==='office' && (
-                <div style={{overflowX:'auto'}}>
-                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px'}}>
-                    <thead><tr style={{borderBottom:'2px solid #e2e8f0',background:'#f8fafc'}}>
-                      <th style={{padding:'12px 8px',textAlign:'left'}}>事務所</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>訪問</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>提案</th>
-                      <th style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff'}}>提案率</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>契約</th>
-                      <th style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7'}}>成約率</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>トスアップ</th>
-                      <th style={{padding:'12px 8px',textAlign:'center',background:'#dbeafe'}}>トスアップ率</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>ID開設</th>
-                      <th style={{padding:'12px 8px',textAlign:'center'}}>報酬</th>
-                    </tr></thead>
-                    <tbody>
-                      {stats.officeStats.map(o=>{
-                        const officeRecords = baseFilteredRecords.filter(r => r.office === o.name);
-                        const targetProducts = filterProduct ? ALL_PRODUCTS.filter(p => p.id === filterProduct) : ALL_PRODUCTS;
-                        const visitRecords = officeRecords;
-                        const proposedRecords = officeRecords.filter(r => targetProducts.some(p => r[`proposal_${p.id}`] === '○'));
-                        const contractRecords = officeRecords.filter(r => targetProducts.some(p => r[`result_${p.id}`] === '契約'));
-                        const tossupRecords = officeRecords.filter(r => targetProducts.some(p => r[`result_${p.id}`] === 'トスアップ'));
-                        const idRecords = officeRecords.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済');
-                        return (
-                        <tr key={o.name} style={{borderBottom:'1px solid #f1f5f9'}}>
-                          <td style={{padding:'12px 8px',fontWeight:'700',fontSize:'15px'}}>{o.name}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontSize:'15px',cursor:o.visits>0?'pointer':'default',textDecoration:o.visits>0?'underline':'none'}} onClick={()=>o.visits>0&&setDetailModal({title:`${o.name} 訪問`,records:visitRecords})}>{o.visits}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',cursor:o.proposed>0?'pointer':'default',textDecoration:o.proposed>0?'underline':'none'}} onClick={()=>o.proposed>0&&setDetailModal({title:`${o.name} 提案`,records:proposedRecords})}>{o.proposed}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:'#2563eb'}}>{o.proposalRate}%</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#059669',cursor:o.contracts>0?'pointer':'default',textDecoration:o.contracts>0?'underline':'none'}} onClick={()=>o.contracts>0&&setDetailModal({title:`${o.name} 契約`,records:contractRecords})}>{o.contracts}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7',fontWeight:'700',color:'#059669'}}>{o.contractRate}%</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#1e40af',cursor:o.tossups>0?'pointer':'default',textDecoration:o.tossups>0?'underline':'none'}} onClick={()=>o.tossups>0&&setDetailModal({title:`${o.name} トスアップ`,records:tossupRecords})}>{o.tossups}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',background:'#dbeafe',fontWeight:'700',color:'#1e40af'}}>{o.tossupRate}%</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',cursor:o.ids>0?'pointer':'default',textDecoration:o.ids>0?'underline':'none'}} onClick={()=>o.ids>0&&setDetailModal({title:`${o.name} ID開設`,records:idRecords})}>{o.ids}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',color:'#059669',fontSize:'15px'}}>¥{o.incentive.toLocaleString()}</td>
-                        </tr>
-                      );})}
-                      {/* 合計行 */}
-                      {(() => {
-                        const totalVisits = stats.officeStats.reduce((sum, o) => sum + o.visits, 0);
-                        const totalProposed = stats.officeStats.reduce((sum, o) => sum + o.proposed, 0);
-                        const totalContracts = stats.officeStats.reduce((sum, o) => sum + o.contracts, 0);
-                        const totalTossups = stats.officeStats.reduce((sum, o) => sum + o.tossups, 0);
-                        const totalIds = stats.officeStats.reduce((sum, o) => sum + o.ids, 0);
-                        const totalIncentive = stats.officeStats.reduce((sum, o) => sum + o.incentive, 0);
-                        const avgProposalRate = totalVisits > 0 ? (totalProposed / totalVisits * 100).toFixed(1) : '0';
-                        const avgContractRate = totalProposed > 0 ? (totalContracts / totalProposed * 100).toFixed(1) : '0';
-                        const avgTossupRate = totalProposed > 0 ? (totalTossups / totalProposed * 100).toFixed(1) : '0';
-                        const targetProducts = filterProduct ? ALL_PRODUCTS.filter(p => p.id === filterProduct) : ALL_PRODUCTS;
-                        const allVisitRecords = baseFilteredRecords;
-                        const allProposedRecords = baseFilteredRecords.filter(r => targetProducts.some(p => r[`proposal_${p.id}`] === '○'));
-                        const allContractRecords = baseFilteredRecords.filter(r => targetProducts.some(p => r[`result_${p.id}`] === '契約'));
-                        const allTossupRecords = baseFilteredRecords.filter(r => targetProducts.some(p => r[`result_${p.id}`] === 'トスアップ'));
-                        const allIdRecords = baseFilteredRecords.filter(r => r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済');
-                        return (
-                          <tr style={{borderTop:'2px solid #1e293b',background:'#1e293b',color:'#fff'}}>
-                            <td style={{padding:'12px 8px',fontWeight:'700'}}>合計</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalVisits>0?'pointer':'default',textDecoration:totalVisits>0?'underline':'none'}} onClick={()=>totalVisits>0&&setDetailModal({title:'全体 訪問',records:allVisitRecords})}>{totalVisits}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalProposed>0?'pointer':'default',textDecoration:totalProposed>0?'underline':'none'}} onClick={()=>totalProposed>0&&setDetailModal({title:'全体 提案',records:allProposedRecords})}>{totalProposed}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700'}}>{avgProposalRate}%</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalContracts>0?'pointer':'default',textDecoration:totalContracts>0?'underline':'none'}} onClick={()=>totalContracts>0&&setDetailModal({title:'全体 契約',records:allContractRecords})}>{totalContracts}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700'}}>{avgContractRate}%</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalTossups>0?'pointer':'default',textDecoration:totalTossups>0?'underline':'none'}} onClick={()=>totalTossups>0&&setDetailModal({title:'全体 トスアップ',records:allTossupRecords})}>{totalTossups}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700'}}>{avgTossupRate}%</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700',cursor:totalIds>0?'pointer':'default',textDecoration:totalIds>0?'underline':'none'}} onClick={()=>totalIds>0&&setDetailModal({title:'全体 ID開設',records:allIdRecords})}>{totalIds}</td>
-                            <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'700'}}>¥{totalIncentive.toLocaleString()}</td>
-                          </tr>
-                        );
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {analysisView==='office' && renderGroupTable(stats.officeStats, '事務所', 'office')}
             </div>
 
             {/* NG理由集計 */}
