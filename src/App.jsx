@@ -31,6 +31,17 @@ const ALL_STAFF = [...STAFF_LIST, ...RETIRED_STAFF];
 const OFFICE_LIST = ['ROS', 'TOS', 'PCチーム', '大阪オフィス'];
 const INDUSTRY_LIST = ['製造', '建設', '卸売', '小売', '商社', '不動産', 'サービス', 'IT', '飲食', 'その他'];
 const ID_STATUS_LIST = ['提案⇒開設', '未開設', '開設済みだった', '-'];
+// 当月の開始日・終了日（デフォルトの絞り込み期間）
+function currentMonthRange() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const pad = (n) => String(n).padStart(2, '0');
+  return {
+    from: `${y}-${pad(m + 1)}-01`,
+    to: `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`
+  };
+}
+
 // トスアップが発生する商材（モール購入とPC提案はROS内で完結するため対象外）
 const TOSSUP_PRODUCTS = ['meo', 'video'];
 
@@ -432,8 +443,8 @@ export default function App() {
   const [showVideoOrderModal, setShowVideoOrderModal] = useState(false);
   
   // フィルター用state
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState(currentMonthRange().from);
+  const [filterDateTo, setFilterDateTo] = useState(currentMonthRange().to);
   const [filterStaff, setFilterStaff] = useState('');
   const [filterOffice, setFilterOffice] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
@@ -726,7 +737,8 @@ export default function App() {
     // 商材フィルターがある場合はその商材だけで計算
     const targetProducts = filterProduct ? ALL_PRODUCTS.filter(p => p.id === filterProduct) : ALL_PRODUCTS;
     const totalTossups = targetProducts.reduce((sum, p) => sum + baseFilteredRecords.filter(r => r[`result_${p.id}`] === 'トスアップ').length, 0);
-    const productStats = ALL_PRODUCTS.map(p => {
+    const tableProducts = filterProduct ? ALL_PRODUCTS.filter(p => p.id === filterProduct) : PRODUCTS;
+    const productStats = tableProducts.map(p => {
       const proposed = baseFilteredRecords.filter(r => r[`proposal_${p.id}`] === '○').length;
       const contracts = baseFilteredRecords.filter(r => r[`result_${p.id}`] === '契約').length;
       const tossups = baseFilteredRecords.filter(r => r[`result_${p.id}`] === 'トスアップ').length;
@@ -1052,8 +1064,9 @@ export default function App() {
                       </select>
                     </div>
                   </div>
-                  <div style={{display:'flex',gap:'10px',justifyContent:'flex-end'}}>
-                    <button onClick={()=>{setFilterDateFrom('');setFilterDateTo('');setFilterStaff('');setFilterOffice('');setFilterProduct('');}} style={{padding:'8px 16px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'#fff',color:'#64748b',fontSize:'13px',cursor:'pointer'}}>クリア</button>
+                  <div style={{display:'flex',gap:'10px',justifyContent:'flex-end',flexWrap:'wrap'}}>
+                    <button onClick={()=>{const m=currentMonthRange();setFilterDateFrom(m.from);setFilterDateTo(m.to);}} style={{padding:'8px 16px',borderRadius:'6px',border:'1px solid #2563eb',background:'#eff6ff',color:'#2563eb',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>📅 今月</button>
+                    <button onClick={()=>{setFilterDateFrom('');setFilterDateTo('');setFilterStaff('');setFilterOffice('');setFilterProduct('');}} style={{padding:'8px 16px',borderRadius:'6px',border:'1px solid #e2e8f0',background:'#fff',color:'#64748b',fontSize:'13px',cursor:'pointer'}}>全期間</button>
                   </div>
                   {(filterDateFrom || filterDateTo || filterStaff || filterOffice || filterProduct) && (
                     <div style={{fontSize:'12px',color:'#64748b',textAlign:'right'}}>
@@ -1406,10 +1419,10 @@ export default function App() {
                         const avgProposalRate = stats.totalVisits > 0 ? (totalProposed / (stats.totalVisits * stats.productStats.length) * 100).toFixed(1) : '0';
                         const avgContractRate = totalProposed > 0 ? (totalContracts / totalProposed * 100).toFixed(1) : '0';
                         const avgTossupRate = totalProposed > 0 ? (totalTossups / totalProposed * 100).toFixed(1) : '0';
-                        const allProposedRecords = baseFilteredRecords.filter(r => ALL_PRODUCTS.some(p => r[`proposal_${p.id}`] === '○'));
-                        const allContractRecords = baseFilteredRecords.filter(r => ALL_PRODUCTS.some(p => r[`result_${p.id}`] === '契約'));
-                        const allTossupRecords = baseFilteredRecords.filter(r => ALL_PRODUCTS.some(p => r[`result_${p.id}`] === 'トスアップ'));
-                        const allNgRecords = baseFilteredRecords.filter(r => ALL_PRODUCTS.some(p => r[`result_${p.id}`] === 'NG'));
+                        const allProposedRecords = baseFilteredRecords.filter(r => stats.productStats.some(p => r[`proposal_${p.id}`] === '○'));
+                        const allContractRecords = baseFilteredRecords.filter(r => stats.productStats.some(p => r[`result_${p.id}`] === '契約'));
+                        const allTossupRecords = baseFilteredRecords.filter(r => stats.productStats.some(p => r[`result_${p.id}`] === 'トスアップ'));
+                        const allNgRecords = baseFilteredRecords.filter(r => stats.productStats.some(p => r[`result_${p.id}`] === 'NG'));
                         return (
                           <tr style={{borderTop:'2px solid #1e293b',background:'#1e293b',color:'#fff'}}>
                             <td style={{padding:'12px 8px',fontWeight:'700'}}>合計</td>
