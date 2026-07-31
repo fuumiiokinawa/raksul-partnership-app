@@ -21,7 +21,13 @@ const SUPABASE_URL = 'https://bxhwkuvojijmhvzwcnyx.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4aHdrdXZvamlqbWh2endjbnl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNzUzMjYsImV4cCI6MjA4NTc1MTMyNn0.Y9KmQfXaR-Ga9tC7UgezDdJpVX0E5vRpQ8ooQNk17eM';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const STAFF_LIST = ['知念', '山内', '奥濱', '喜如嘉', '徳田', '稲福', '石田', 'ヴィンス', '伊敷', '嘉数', '青木', '高吉', '橋本', '比嘉裕', '鎌倉', '上原', '前原', '大城', '石嶺', '栽', '照屋', '真栄城', '我如古', '下地', '城間', '當眞', '知念晃矢', '仲尾', '寺内', '宮平'];
+// 現在在籍している担当者（入力フォーム用）
+// ※抜けた担当者はここから外す。過去データは下のALL_STAFFで集計され続けます
+const STAFF_LIST = ['知念', '山内', '奥濱', '喜如嘉', '徳田', '稲福', '石田', 'ヴィンス', '伊敷', '嘉数', '青木', '高吉', '鎌倉', '上原', '前原', '大城', '栽', '照屋', '我如古', '當眞', '知念晃矢', '仲尾', '寺内', '宮平'];
+
+// 過去に在籍した担当者を含む全員（集計・絞り込み用）
+const RETIRED_STAFF = ['橋本', '比嘉裕', '石嶺', '真栄城', '下地', '城間'];
+const ALL_STAFF = [...STAFF_LIST, ...RETIRED_STAFF];
 const OFFICE_LIST = ['ROS', 'TOS', 'PCチーム', '大阪オフィス'];
 const INDUSTRY_LIST = ['製造', '建設', '卸売', '小売', '商社', '不動産', 'サービス', 'IT', '飲食', 'その他'];
 const ID_STATUS_LIST = ['提案⇒開設', '未開設', '開設済みだった', '-'];
@@ -660,7 +666,7 @@ export default function App() {
       return { ...p, proposed, contracts, tossups, ngs, proposalRate: totalVisits > 0 ? (proposed/totalVisits*100).toFixed(1) : '0', contractRate: proposed > 0 ? (contracts/proposed*100).toFixed(1) : '0', tossupRate: proposed > 0 ? (tossups/proposed*100).toFixed(1) : '0' };
     }).filter(p => p.proposed > 0 || p.contracts > 0 || p.tossups > 0 || p.ngs > 0);
     const totalIncentive = baseFilteredRecords.reduce((sum, r) => sum + calcIncentive(r), 0);
-    const staffStats = STAFF_LIST.map(s => {
+    const staffStats = ALL_STAFF.map(s => {
       const sr = baseFilteredRecords.filter(r => r.staff === s);
       const proposed = targetProducts.reduce((sum, p) => sum + sr.filter(r => r[`proposal_${p.id}`] === '○').length, 0);
       const tossups = targetProducts.reduce((sum, p) => sum + sr.filter(r => r[`result_${p.id}`] === 'トスアップ').length, 0);
@@ -703,7 +709,7 @@ export default function App() {
       notProposedRecords: pcNotProposedRecords,
       unrecordedRecords: pcUnrecordedRecords,
       reasons: Object.entries(pcReasonCounts).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
-      byStaff: STAFF_LIST.map(s => {
+      byStaff: ALL_STAFF.map(s => {
         const sv = pcVisitRecords.filter(r => r.staff === s);
         const sp = sv.filter(r => r.pc_proposal === '提案した');
         return { name: s, visits: sv.length, proposed: sp.length, rate: sv.length > 0 ? (sp.length / sv.length * 100).toFixed(1) : '0', records: sv, proposedRecords: sp };
@@ -798,7 +804,7 @@ export default function App() {
                       <label style={{fontSize:'12px',color:'#64748b',display:'block',marginBottom:'4px'}}>担当者</label>
                       <select value={filterStaff} onChange={e=>setFilterStaff(e.target.value)} style={{width:'100%',padding:'10px',borderRadius:'6px',border:'1px solid #e2e8f0',fontSize:'13px',background:'#fff'}}>
                         <option value="">全員</option>
-                        {STAFF_LIST.map(s=><option key={s} value={s}>{s}</option>)}
+                        {ALL_STAFF.map(s=><option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                     <div>
