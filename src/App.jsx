@@ -34,6 +34,9 @@ const ID_STATUS_LIST = ['提案⇒開設', '未開設', '開設済みだった',
 const RESULT_LIST = ['契約', '内諾', 'トスアップ', 'NG', '検討中', '未提案', '-'];
 const TIMING_LIST = ['営業', '取材', 'PC設置・回収時', 'その他'];
 
+// ラクスルIDを入力できなかった理由（定型）
+const ID_MISSING_REASONS = ['担当者が不在で確認できず', '顧客がID開示を拒否', '後日あらためて登録予定', 'メールアドレスが不明', 'ID登録自体を断られた', 'その他'];
+
 const NG_REASONS = {
   bank: ['複数口座不要', '既存取引優先', '管理が煩雑', '手続きが面倒', '興味なし', 'その他'],
   pay: ['既存決済システムあり', '手数料が高い', '導入が面倒', '対面販売なし', '商品点数20以上', '興味なし', 'その他'],
@@ -434,6 +437,10 @@ export default function App() {
   // NG理由折りたたみ用state
   const [showAllNgReasons, setShowAllNgReasons] = useState(false);
 
+  // ラクスルID未入力（理由記載）モード用state
+  const [idBlocked, setIdBlocked] = useState(false);
+  const [showIdReasonOther, setShowIdReasonOther] = useState(false);
+
   // PC提案セクション折りたたみ用state
   const [showPcReasons, setShowPcReasons] = useState(false);
   const [showPcByStaff, setShowPcByStaff] = useState(false);
@@ -481,16 +488,29 @@ export default function App() {
       return;
     }
     
-    // 新規の場合はラクスルID登録必須
-    if (formData.customer_type === '新規' && formData.raksul_id_status !== '提案⇒開設') {
-      alert('新規ユーザーはラクスルID登録が必須です');
-      return;
-    }
-    
-    // 既存の場合はラクスルID記録必須
-    if (formData.customer_type === '既存' && !formData.existing_raksul_id) {
-      alert('既存ユーザーはラクスルIDの確認・記録が必須です');
-      return;
+    // ラクスルID：入力できない場合は理由の記載が必須
+    if (idBlocked) {
+      if (!(formData.raksul_id_missing_reason || '').trim()) {
+        alert('ラクスルIDを入力できない場合は、その理由を必ず記載してください');
+        return;
+      }
+    } else {
+      // 新規：ID登録＋メールアドレス必須
+      if (formData.customer_type === '新規') {
+        if (formData.raksul_id_status !== '提案⇒開設') {
+          alert('新規ユーザーはラクスルID登録が必須です\n\n登録できなかった場合は「⚠️ IDを入力できない場合はこちら」から理由を記載してください');
+          return;
+        }
+        if (!(formData.raksul_email || '').trim()) {
+          alert('登録したラクスルID（メールアドレス）を入力してください');
+          return;
+        }
+      }
+      // 既存：ID記録必須
+      if (formData.customer_type === '既存' && !(formData.existing_raksul_id || '').trim()) {
+        alert('既存ユーザーはラクスルIDの確認・記録が必須です\n\n確認できなかった場合は「⚠️ IDを入力できない場合はこちら」から理由を記載してください');
+        return;
+      }
     }
     
     // 訪問時はPC提案の選択必須
@@ -541,6 +561,7 @@ export default function App() {
       timing: formData.timing || null,
       raksul_id_status: formData.raksul_id_status, raksul_email: formData.raksul_email || null,
       existing_raksul_id: formData.existing_raksul_id || null,
+      raksul_id_missing_reason: formData.raksul_id_missing_reason || null,
       pc_proposal: formData.pc_proposal || null,
       pc_not_proposed_reason: formData.pc_not_proposed_reason || null,
       proposal_bank: formData.proposal_bank, proposal_pay: formData.proposal_pay,
@@ -587,6 +608,7 @@ export default function App() {
       customer_type: '', // 新規/既存
       raksul_id_status: '-', raksul_email: '', 
       existing_raksul_id: '', // 既存ユーザーのID記録用
+      raksul_id_missing_reason: '', // IDを入力できなかった理由
       pc_proposal: '', // 提案した/提案しなかった
       pc_not_proposed_reason: '', // 提案しなかった理由
       timing: '',
@@ -612,6 +634,10 @@ export default function App() {
     setFormData({ ...r }); 
     setEditingId(r.id); 
     setShowForm(true);
+    // ID未入力（理由記載）モードの復元
+    const missing = r.raksul_id_missing_reason || '';
+    setIdBlocked(!!missing);
+    setShowIdReasonOther(!!missing && !ID_MISSING_REASONS.includes(missing));
     // 既存のNG理由が定型外なら「その他」入力を表示
     const otherInputs = {};
     ALL_PRODUCTS.forEach(p => {
@@ -724,6 +750,12 @@ export default function App() {
     const newIdMissingRecords = newRecords.filter(r => !(r.raksul_id_status === '提案⇒開設' || r.raksul_id_status === '開設済'));
     const existingIdRecordedRecords = existingRecords.filter(r => r.existing_raksul_id);
     const existingIdMissingRecords = existingRecords.filter(r => !r.existing_raksul_id);
+    const idMissingRecords = baseFilteredRecords.filter(r => r.raksul_id_missing_reason);
+    const idMissingReasonCounts = {};
+    idMissingRecords.forEach(r => {
+      const key = (r.raksul_id_missing_reason || '').trim() || '理由未入力';
+      idMissingReasonCounts[key] = (idMissingReasonCounts[key] || 0) + 1;
+    });
     const customerStats = {
       newCount: newRecords.length,
       existingCount: existingRecords.length,
@@ -736,17 +768,20 @@ export default function App() {
       existingIdRecorded: existingIdRecordedRecords.length,
       existingIdMissing: existingIdMissingRecords.length,
       existingIdRate: existingRecords.length > 0 ? (existingIdRecordedRecords.length / existingRecords.length * 100).toFixed(1) : '0',
-      existingIdRecordedRecords, existingIdMissingRecords
+      existingIdRecordedRecords, existingIdMissingRecords,
+      idMissingRecords: idMissingRecords,
+      idMissingCount: idMissingRecords.length,
+      idMissingReasons: Object.entries(idMissingReasonCounts).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count)
     };
 
     return { totalVisits, idOpened, totalTossups, productStats, staffStats, officeStats, totalIncentive, ngStatsByProduct, videoOrdered, pcStats, customerStats };
   }, [filterProduct, baseFilteredRecords]);
 
   function exportCSV() {
-    const h = ['訪問日','担当者','企業名','業種','事務所','営業先','商談方法','顧客種別','PC提案','PC未提案理由','提案タイミング','ID状態','メールアドレス','既存ID','バンク提案','ペイ提案','モール提案','MEO提案','動画提案','バンク結果','ペイ結果','モール結果','MEO結果','動画結果','バンクNG','ペイNG','モールNG','MEONG','動画NG','モール未購入理由','ID未開設理由','動画申込','報酬','備考'];
+    const h = ['訪問日','担当者','企業名','業種','事務所','営業先','商談方法','顧客種別','PC提案','PC未提案理由','提案タイミング','ID状態','メールアドレス','既存ID','ID未入力理由','バンク提案','ペイ提案','モール提案','MEO提案','動画提案','バンク結果','ペイ結果','モール結果','MEO結果','動画結果','バンクNG','ペイNG','モールNG','MEONG','動画NG','モール未購入理由','ID未開設理由','動画申込','報酬','備考'];
     const rows = filteredRecords.map(r => {
       const idStatus = r.raksul_id_status === '開設済' ? '提案⇒開設' : r.raksul_id_status;
-      return [r.visit_date,r.staff,r.company,r.industry,r.office,r.sales_source,r.sales_method,r.customer_type,r.pc_proposal,r.pc_not_proposed_reason,r.timing,idStatus,r.raksul_email,r.existing_raksul_id,r.proposal_bank,r.proposal_pay,r.proposal_mall,r.proposal_meo,r.proposal_video,r.result_bank,r.result_pay,r.result_mall,r.result_meo,r.result_video,r.ng_bank,r.ng_pay,r.ng_mall,r.ng_meo,r.ng_video,r.mall_not_purchased_reason,r.id_not_opened_reason,r.video_ordered,calcIncentive(r),r.note];
+      return [r.visit_date,r.staff,r.company,r.industry,r.office,r.sales_source,r.sales_method,r.customer_type,r.pc_proposal,r.pc_not_proposed_reason,r.timing,idStatus,r.raksul_email,r.existing_raksul_id,r.raksul_id_missing_reason,r.proposal_bank,r.proposal_pay,r.proposal_mall,r.proposal_meo,r.proposal_video,r.result_bank,r.result_pay,r.result_mall,r.result_meo,r.result_video,r.ng_bank,r.ng_pay,r.ng_mall,r.ng_meo,r.ng_video,r.mall_not_purchased_reason,r.id_not_opened_reason,r.video_ordered,calcIncentive(r),r.note];
     });
     const csv = '\uFEFF' + [h,...rows].map(r => r.map(c => `"${c||''}"`).join(',')).join('\n');
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -989,6 +1024,23 @@ export default function App() {
                         <span onClick={()=>stats.customerStats.existingIdMissing>0&&setDetailModal({title:'⚠️ 既存：ID未記録',records:stats.customerStats.existingIdMissingRecords})} style={{color:stats.customerStats.existingIdMissing>0?'#dc2626':'#94a3b8',fontWeight:stats.customerStats.existingIdMissing>0?'600':'400',cursor:stats.customerStats.existingIdMissing>0?'pointer':'default',textDecoration:stats.customerStats.existingIdMissing>0?'underline':'none'}}>未記録 {stats.customerStats.existingIdMissing}件</span>
                       </div>
                     </div>
+
+                    {/* ID未入力の理由 */}
+                    {stats.customerStats.idMissingReasons.length > 0 && (
+                      <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid #f1f5f9'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
+                          <span style={{fontSize:'12px',fontWeight:'600',color:'#dc2626'}}>⚠️ IDを入力できなかった理由</span>
+                          <span onClick={()=>setDetailModal({title:'⚠️ ラクスルID未入力',records:stats.customerStats.idMissingRecords})} style={{fontSize:'11px',color:'#dc2626',cursor:'pointer',textDecoration:'underline'}}>計 {stats.customerStats.idMissingCount}件</span>
+                        </div>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                          {stats.customerStats.idMissingReasons.map((n,idx)=>(
+                            <span key={n.reason} style={{padding:'4px 10px',background:idx===0?'#fecaca':'#fee2e2',color:'#991b1b',borderRadius:'8px',fontSize:'12px',fontWeight:idx===0?'600':'400',border:idx===0?'1px solid #dc2626':'none'}}>
+                              {idx===0?'🥇 ':idx===1?'🥈 ':idx===2?'🥉 ':''}{n.reason} <strong>{n.count}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1664,7 +1716,7 @@ export default function App() {
                 </div>
                 
                 {/* 新規ユーザーの場合：ID登録必須 */}
-                {formData.customer_type === '新規' && (
+                {formData.customer_type === '新規' && !idBlocked && (
                   <div style={{padding:'12px',background:'#fff',borderRadius:'8px',border:'1px solid #dcfce7'}}>
                     <div style={{fontSize:'12px',color:'#059669',fontWeight:'600',marginBottom:'8px'}}>⚠️ 新規ユーザーはラクスルID登録が必須です</div>
                     <button type="button" onClick={()=>setFormData({...formData,raksul_id_status:formData.raksul_id_status==='提案⇒開設'?'-':'提案⇒開設'})} style={{width:'100%',padding:'12px',borderRadius:'8px',border:formData.raksul_id_status==='提案⇒開設'?'2px solid #059669':'2px solid #dc2626',background:formData.raksul_id_status==='提案⇒開設'?'#dcfce7':'#fef2f2',color:formData.raksul_id_status==='提案⇒開設'?'#059669':'#dc2626',fontSize:'14px',fontWeight:'700',cursor:'pointer',marginBottom:'10px'}}>{formData.raksul_id_status==='提案⇒開設'?'✓ ID登録完了':'ID登録をタップして確認'}</button>
@@ -1675,10 +1727,65 @@ export default function App() {
                 )}
                 
                 {/* 既存ユーザーの場合：ID確認・記録 */}
-                {formData.customer_type === '既存' && (
+                {formData.customer_type === '既存' && !idBlocked && (
                   <div style={{padding:'12px',background:'#fff',borderRadius:'8px',border:'1px solid #dbeafe'}}>
                     <div style={{fontSize:'12px',color:'#2563eb',fontWeight:'600',marginBottom:'8px'}}>📝 ラクスルIDを確認・記録してください</div>
                     <input type="text" placeholder="ラクスルID（メールアドレス）を入力 *必須" value={formData.existing_raksul_id} onChange={e=>setFormData({...formData,existing_raksul_id:e.target.value})} style={{width:'100%',padding:'12px',borderRadius:'8px',border:'1px solid #e2e8f0',fontSize:'14px',boxSizing:'border-box'}} />
+                  </div>
+                )}
+
+                {/* IDを入力できない場合：理由の記載を必須にする */}
+                {formData.customer_type && (
+                  <div style={{marginTop:'10px'}}>
+                    <button
+                      type="button"
+                      onClick={()=>{
+                        const next = !idBlocked;
+                        setIdBlocked(next);
+                        setShowIdReasonOther(false);
+                        setFormData(next
+                          ? {...formData, raksul_id_missing_reason:'', raksul_id_status:'-', raksul_email:'', existing_raksul_id:''}
+                          : {...formData, raksul_id_missing_reason:''});
+                      }}
+                      style={{width:'100%',padding:'10px',borderRadius:'8px',border:idBlocked?'1px solid #94a3b8':'1px dashed #dc2626',background:idBlocked?'#f1f5f9':'#fff',color:idBlocked?'#475569':'#dc2626',fontSize:'12px',fontWeight:'600',cursor:'pointer'}}
+                    >
+                      {idBlocked ? '↩ IDを入力する' : '⚠️ IDを入力できない場合はこちら'}
+                    </button>
+
+                    {idBlocked && (
+                      <div style={{marginTop:'10px',padding:'12px',background:'#fff',borderRadius:'8px',border:'2px solid #dc2626'}}>
+                        <div style={{fontSize:'12px',color:'#dc2626',fontWeight:'700',marginBottom:'8px'}}>入力できない理由を選択<span style={{marginLeft:'4px'}}>*必須</span></div>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                          {ID_MISSING_REASONS.map(reason => {
+                            const selected = reason === 'その他'
+                              ? showIdReasonOther
+                              : (!showIdReasonOther && formData.raksul_id_missing_reason === reason);
+                            return (
+                              <button
+                                key={reason}
+                                type="button"
+                                onClick={()=>{
+                                  if (reason === 'その他') { setShowIdReasonOther(true); setFormData({...formData, raksul_id_missing_reason:''}); }
+                                  else { setShowIdReasonOther(false); setFormData({...formData, raksul_id_missing_reason:reason}); }
+                                }}
+                                style={{padding:'8px 12px',borderRadius:'6px',border:selected?'2px solid #dc2626':'1px solid #e2e8f0',background:selected?'#fee2e2':'#fff',color:selected?'#991b1b':'#64748b',fontSize:'12px',fontWeight:selected?'600':'400',cursor:'pointer'}}
+                              >
+                                {reason}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {showIdReasonOther && (
+                          <input
+                            type="text"
+                            placeholder="理由を具体的に入力 *必須"
+                            value={formData.raksul_id_missing_reason || ''}
+                            onChange={e=>setFormData({...formData, raksul_id_missing_reason:e.target.value})}
+                            style={{width:'100%',marginTop:'8px',padding:'12px',borderRadius:'8px',border:'1px solid #e2e8f0',fontSize:'14px',boxSizing:'border-box'}}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
