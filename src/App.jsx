@@ -31,6 +31,9 @@ const ALL_STAFF = [...STAFF_LIST, ...RETIRED_STAFF];
 const OFFICE_LIST = ['ROS', 'TOS', 'PCチーム', '大阪オフィス'];
 const INDUSTRY_LIST = ['製造', '建設', '卸売', '小売', '商社', '不動産', 'サービス', 'IT', '飲食', 'その他'];
 const ID_STATUS_LIST = ['提案⇒開設', '未開設', '開設済みだった', '-'];
+// トスアップが発生する商材（モール購入とPC提案はROS内で完結するため対象外）
+const TOSSUP_PRODUCTS = ['meo', 'video'];
+
 const RESULT_LIST = ['契約', '内諾', 'トスアップ', 'NG', '検討中', '未提案', '-'];
 const TIMING_LIST = ['営業', '取材', 'PC設置・回収時', 'その他'];
 
@@ -162,7 +165,7 @@ const MANUAL_SECTIONS = [
         items: [
           '契約：成約した場合',
           '内諾：口頭OKをもらった場合',
-          'トスアップ：上司や別担当に引き継ぐ場合（MEOはトスアップ報告フォームあり）',
+          'トスアップ：上司や別担当に引き継ぐ場合。MEO・動画のみが対象で、モール購入とPC提案はROS内で完結します（MEOはトスアップ報告フォームあり）',
           'NG：断られた場合（プルダウンから理由を選択、その他は自由入力）',
           '検討中：保留・後日連絡の場合',
           '未提案：今回提案しなかった場合'
@@ -887,7 +890,7 @@ export default function App() {
     return (
       <td onClick={()=>clickable&&setDetailModal({title, records})}
           style={{padding:'10px 8px',textAlign:'center',background:dark?'transparent':rateBg(rate),cursor:clickable?'pointer':'default'}}>
-        <div style={{fontSize:'14px',fontWeight:'700',color:dark?'#fff':rateColor(rate)}}>{(rate === null || rate === undefined) ? '\u2013' : `${rate}%`}</div>
+        <div style={{fontSize:'14px',fontWeight:'700',color:dark?'#fff':rateColor(rate)}}>{(rate === null || rate === undefined) ? '—' : `${rate}%`}</div>
         {sub && <div style={{fontSize:'10px',color:dark?'#cbd5e1':'#64748b',marginTop:'2px'}}>{sub}</div>}
       </td>
     );
@@ -1361,11 +1364,11 @@ export default function App() {
                       <tr style={{borderBottom:'1px solid #f1f5f9',background:'#fafafa'}}>
                         <td style={{padding:'12px 8px'}}><span style={{padding:'4px 10px',borderRadius:'6px',background:'#64748b15',color:'#475569',fontWeight:'600'}}>💻 PC</span></td>
                         <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',cursor:stats.pcStats.proposed>0?'pointer':'default',textDecoration:stats.pcStats.proposed>0?'underline':'none'}} onClick={()=>stats.pcStats.proposed>0&&setDetailModal({title:'PC提案あり',records:stats.pcStats.proposedRecords})}>{stats.pcStats.proposed}</td>
-                        <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:rateColor(stats.pcStats.targetVisits>0?stats.pcStats.rate:null)}}>{stats.pcStats.targetVisits>0?`${stats.pcStats.rate}%`:'\u2013'}</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:rateColor(stats.pcStats.targetVisits>0?stats.pcStats.rate:null)}}>{stats.pcStats.targetVisits>0?`${stats.pcStats.rate}%`:'—'}</td>
                         <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#059669',cursor:stats.pcStats.ordered>0?'pointer':'default',textDecoration:stats.pcStats.ordered>0?'underline':'none'}} onClick={()=>stats.pcStats.ordered>0&&setDetailModal({title:'PC受注',records:stats.pcStats.orderedRecords})}>{stats.pcStats.ordered}</td>
                         <td style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7',fontWeight:'700',color:'#059669'}}>{stats.pcStats.orderRate}%</td>
-                        <td style={{padding:'12px 8px',textAlign:'center',color:'#94a3b8'}}>\u2013</td>
-                        <td style={{padding:'12px 8px',textAlign:'center',background:'#dbeafe',color:'#94a3b8'}}>\u2013</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
                         <td style={{padding:'12px 8px',textAlign:'center',color:'#dc2626',cursor:stats.pcStats.ngCount>0?'pointer':'default',textDecoration:stats.pcStats.ngCount>0?'underline':'none'}} onClick={()=>stats.pcStats.ngCount>0&&setDetailModal({title:'PC NG',records:stats.pcStats.ngRecords})}>{stats.pcStats.ngCount}</td>
                       </tr>
                       {stats.productStats.map(p=>{
@@ -1380,8 +1383,17 @@ export default function App() {
                           <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:'#2563eb'}}>{p.proposalRate}%</td>
                           <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#059669',cursor:p.contracts>0?'pointer':'default',textDecoration:p.contracts>0?'underline':'none'}} onClick={()=>p.contracts>0&&setDetailModal({title:`${p.name} 契約`,records:contractRecords})}>{p.contracts}</td>
                           <td style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7',fontWeight:'700',color:'#059669'}}>{p.contractRate}%</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#1e40af',cursor:p.tossups>0?'pointer':'default',textDecoration:p.tossups>0?'underline':'none'}} onClick={()=>p.tossups>0&&setDetailModal({title:`${p.name} トスアップ`,records:tossupRecords})}>{p.tossups}</td>
-                          <td style={{padding:'12px 8px',textAlign:'center',background:'#dbeafe',fontWeight:'700',color:'#1e40af'}}>{p.tossupRate}%</td>
+                          {(TOSSUP_PRODUCTS.includes(p.id) || p.tossups > 0) ? (
+                            <>
+                              <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#1e40af',cursor:p.tossups>0?'pointer':'default',textDecoration:p.tossups>0?'underline':'none'}} onClick={()=>p.tossups>0&&setDetailModal({title:`${p.name} トスアップ`,records:tossupRecords})}>{p.tossups}</td>
+                              <td style={{padding:'12px 8px',textAlign:'center',background:'#dbeafe',fontWeight:'700',color:'#1e40af'}}>{p.tossupRate}%</td>
+                            </>
+                          ) : (
+                            <>
+                              <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
+                              <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
+                            </>
+                          )}
                           <td style={{padding:'12px 8px',textAlign:'center',color:'#dc2626',cursor:p.ngs>0?'pointer':'default',textDecoration:p.ngs>0?'underline':'none'}} onClick={()=>p.ngs>0&&setDetailModal({title:`${p.name} NG`,records:ngRecords})}>{p.ngs}</td>
                         </tr>
                       );})}
@@ -1414,7 +1426,7 @@ export default function App() {
                     </tbody>
                   </table>
                   <div style={{marginTop:'8px',fontSize:'11px',color:'#94a3b8'}}>
-                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外・訪問{stats.pcStats.targetVisits}件）。成約率・トスアップ率は提案数に対する割合です。PCはトスアップを記録していないため「–」と表示されます。
+                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外・訪問{stats.pcStats.targetVisits}件）。成約率・トスアップ率は提案数に対する割合です。トスアップが発生するのはMEO・動画のみで、モールの購入とPC提案はROS内で完結するため「対象外」と表示されます。
                   </div>
                 </div>
               )}
@@ -1976,8 +1988,8 @@ export default function App() {
                 <div style={{display:'grid',gap:'12px'}}>
                   {PRODUCTS.map(p=>{
                     const isSelected = formData[`result_${p.id}`] && formData[`result_${p.id}`] !== '-';
-                    // 全商材で内諾を無効化、モールはトスアップも無効化、動画もトスアップ無効化、MEOは契約とトスアップ無効化
-                    const disabledResults = p.id === 'mall' ? ['内諾', 'トスアップ'] : p.id === 'video' ? ['内諾', 'トスアップ'] : p.id === 'meo' ? ['内諾', '契約'] : ['内諾'];
+                    // 内諾は全商材で無効。トスアップはMEO・動画のみ（モール購入とPCはROS内で完結）。MEOは契約なし
+                    const disabledResults = p.id === 'meo' ? ['内諾', '契約'] : (TOSSUP_PRODUCTS.includes(p.id) ? ['内諾'] : ['内諾', 'トスアップ']);
                     return (
                     <div key={p.id} style={{padding:'14px',background:isSelected?'#f8fafc':'#fef2f2',borderRadius:'10px',border:isSelected?`2px solid ${RESULT_COLORS[formData[`result_${p.id}`]]?.text||p.color}20`:'2px solid #fca5a5'}}>
                       {/* 商材名と結果ボタン */}
