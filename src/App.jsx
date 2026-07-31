@@ -36,7 +36,7 @@ const TIMING_LIST = ['営業', '取材', 'PC設置・回収時', 'その他'];
 
 // PC提案の結果まわり
 const PC_DEVICE_LIST = ['A4', 'モバイル', 'DT'];
-const PC_UNIT_RANGES = ['1〜10台', '10台〜'];
+const PC_UNIT_RANGES = ['1台', '2台', '3台', '4台', '5台', '6台', '7台', '8台', '9台', '10台', '11台以上'];
 const PC_NG_REASONS = ['既存リースが残っている', '価格が合わない', '社内決裁が下りない', '既存ベンダーを継続', '台数が少なく不要', '検討中で保留', 'その他'];
 
 // ラクスルIDを入力できなかった理由（定型）
@@ -820,7 +820,11 @@ export default function App() {
       ngRecords: pcNgRecords,
       resultUnrecordedRecords: pcResultUnrecordedRecords,
       devices: Object.entries(pcDeviceCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
-      units: Object.entries(pcUnitCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
+      units: Object.entries(pcUnitCounts).map(([name, count]) => ({ name, count })).sort((a, b) => {
+        const ia = PC_UNIT_RANGES.indexOf(a.name), ib = PC_UNIT_RANGES.indexOf(b.name);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      }),
+      totalUnits: pcOrderedRecords.reduce((sum, r) => sum + (parseInt(r.pc_units, 10) || 0), 0),
       ngReasons: Object.entries(pcNgReasonCounts).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
       targetVisits: pcVisitRecords.length,
       proposed: pcProposedRecords.length,
@@ -1132,7 +1136,7 @@ export default function App() {
                         )}
                         {stats.pcStats.units.length > 0 && (
                           <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'6px'}}>
-                            <span style={{fontSize:'11px',color:'#64748b',alignSelf:'center'}}>台数：</span>
+                            <span style={{fontSize:'11px',color:'#64748b',alignSelf:'center'}}>台数（計 約{stats.pcStats.totalUnits}台）：</span>
                             {stats.pcStats.units.map(u=>(
                               <span key={u.name} style={{padding:'3px 10px',background:'#eff6ff',color:'#1e40af',borderRadius:'8px',fontSize:'11px'}}>{u.name} <strong>{u.count}</strong></span>
                             ))}
