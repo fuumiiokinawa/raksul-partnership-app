@@ -872,7 +872,11 @@ export default function App() {
       const key = (r.raksul_id_missing_reason || '').trim() || '理由未入力';
       idMissingReasonCounts[key] = (idMissingReasonCounts[key] || 0) + 1;
     });
+    const idAcquiredRecords = baseFilteredRecords.filter(hasId);
     const customerStats = {
+      idAcquired: idAcquiredRecords.length,
+      idAcquiredRecords,
+      idAcquiredRate: totalVisits > 0 ? (idAcquiredRecords.length / totalVisits * 100).toFixed(1) : '0',
       newCount: newRecords.length,
       existingCount: existingRecords.length,
       unsetCount: unsetTypeRecords.length,
@@ -1384,6 +1388,32 @@ export default function App() {
                         <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
                         <td style={{padding:'12px 8px',textAlign:'center',color:'#dc2626',cursor:stats.pcStats.ngCount>0?'pointer':'default',textDecoration:stats.pcStats.ngCount>0?'underline':'none'}} onClick={()=>stats.pcStats.ngCount>0&&setDetailModal({title:'PC NG',records:stats.pcStats.ngRecords})}>{stats.pcStats.ngCount}</td>
                       </tr>
+                      {/* ラクスルID */}
+                      <tr style={{borderBottom:'1px solid #f1f5f9',background:'#fafafa'}}>
+                        <td style={{padding:'12px 8px'}}><span style={{padding:'4px 10px',borderRadius:'6px',background:'#6366f115',color:'#4f46e5',fontWeight:'600'}}>🆔 ラクスルID</span></td>
+                        <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',cursor:stats.customerStats.idAcquired>0?'pointer':'default',textDecoration:stats.customerStats.idAcquired>0?'underline':'none'}} onClick={()=>stats.customerStats.idAcquired>0&&setDetailModal({title:'ラクスルID取得',records:stats.customerStats.idAcquiredRecords})}>
+                          {stats.customerStats.idAcquired}
+                          <div style={{fontSize:'10px',color:'#94a3b8',fontWeight:'400'}}>取得</div>
+                        </td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:'#2563eb'}}>
+                          {stats.customerStats.idAcquiredRate}%
+                          <div style={{fontSize:'10px',color:'#64748b',fontWeight:'400'}}>取得率</div>
+                        </td>
+                        <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#059669',cursor:stats.customerStats.newIdOpened>0?'pointer':'default',textDecoration:stats.customerStats.newIdOpened>0?'underline':'none'}} onClick={()=>stats.customerStats.newIdOpened>0&&setDetailModal({title:'新規ID開設',records:stats.customerStats.newIdOpenedRecords})}>
+                          {stats.customerStats.newIdOpened}
+                          <div style={{fontSize:'10px',color:'#94a3b8',fontWeight:'400'}}>新規開設</div>
+                        </td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7',fontWeight:'700',color:'#059669'}}>
+                          {stats.customerStats.newIdRate}%
+                          <div style={{fontSize:'10px',color:'#64748b',fontWeight:'400'}}>新規開設率</div>
+                        </td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',color:'#dc2626',cursor:stats.customerStats.idMissingCount>0?'pointer':'default',textDecoration:stats.customerStats.idMissingCount>0?'underline':'none'}} onClick={()=>stats.customerStats.idMissingCount>0&&setDetailModal({title:'⚠️ ラクスルID未入力',records:stats.customerStats.idMissingRecords})}>
+                          {stats.customerStats.idMissingCount}
+                          <div style={{fontSize:'10px',color:'#94a3b8',fontWeight:'400'}}>未入力</div>
+                        </td>
+                      </tr>
                       {stats.productStats.map(p=>{
                         const proposedRecords = baseFilteredRecords.filter(r => r[`proposal_${p.id}`] === '○');
                         const contractRecords = baseFilteredRecords.filter(r => r[`result_${p.id}`] === '契約');
@@ -1439,7 +1469,7 @@ export default function App() {
                     </tbody>
                   </table>
                   <div style={{marginTop:'8px',fontSize:'11px',color:'#94a3b8'}}>
-                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外・訪問{stats.pcStats.targetVisits}件）。成約率・トスアップ率は提案数に対する割合です。トスアップが発生するのはMEO・動画のみで、モールの購入とPC提案はROS内で完結するため「対象外」と表示されます。
+                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外・訪問{stats.pcStats.targetVisits}件）。成約率・トスアップ率は提案数に対する割合です。トスアップが発生するのはMEO・動画のみで、モール購入・PC提案・ラクスルIDはROS内で完結するため「対象外」と表示されます。🆔ラクスルIDは列の意味が商材と異なるため、各数字の下に内容を表示しています（取得＝新規開設＋既存記録、未入力＝理由を記載して保存した件数）。
                   </div>
                 </div>
               )}
