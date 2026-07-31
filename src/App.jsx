@@ -1362,7 +1362,11 @@ export default function App() {
                         <td style={{padding:'12px 8px'}}><span style={{padding:'4px 10px',borderRadius:'6px',background:'#64748b15',color:'#475569',fontWeight:'600'}}>💻 PC</span></td>
                         <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',cursor:stats.pcStats.proposed>0?'pointer':'default',textDecoration:stats.pcStats.proposed>0?'underline':'none'}} onClick={()=>stats.pcStats.proposed>0&&setDetailModal({title:'PC提案あり',records:stats.pcStats.proposedRecords})}>{stats.pcStats.proposed}</td>
                         <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:rateColor(stats.pcStats.targetVisits>0?stats.pcStats.rate:null)}}>{stats.pcStats.targetVisits>0?`${stats.pcStats.rate}%`:'\u2013'}</td>
-                        <td colSpan={5} style={{padding:'12px 8px',textAlign:'center',color:'#94a3b8',fontSize:'11px'}}>提案有無のみ記録（母数は訪問{stats.pcStats.targetVisits}件）</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#059669',cursor:stats.pcStats.ordered>0?'pointer':'default',textDecoration:stats.pcStats.ordered>0?'underline':'none'}} onClick={()=>stats.pcStats.ordered>0&&setDetailModal({title:'PC受注',records:stats.pcStats.orderedRecords})}>{stats.pcStats.ordered}</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7',fontWeight:'700',color:'#059669'}}>{stats.pcStats.orderRate}%</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',color:'#94a3b8'}}>\u2013</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',background:'#dbeafe',color:'#94a3b8'}}>\u2013</td>
+                        <td style={{padding:'12px 8px',textAlign:'center',color:'#dc2626',cursor:stats.pcStats.ngCount>0?'pointer':'default',textDecoration:stats.pcStats.ngCount>0?'underline':'none'}} onClick={()=>stats.pcStats.ngCount>0&&setDetailModal({title:'PC NG',records:stats.pcStats.ngRecords})}>{stats.pcStats.ngCount}</td>
                       </tr>
                       {stats.productStats.map(p=>{
                         const proposedRecords = baseFilteredRecords.filter(r => r[`proposal_${p.id}`] === '○');
@@ -1410,7 +1414,7 @@ export default function App() {
                     </tbody>
                   </table>
                   <div style={{marginTop:'8px',fontSize:'11px',color:'#94a3b8'}}>
-                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外）。成約率・トスアップ率は提案数に対する割合です。
+                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外・訪問{stats.pcStats.targetVisits}件）。成約率・トスアップ率は提案数に対する割合です。PCはトスアップを記録していないため「–」と表示されます。
                   </div>
                 </div>
               )}
