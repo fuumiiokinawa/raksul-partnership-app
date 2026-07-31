@@ -762,15 +762,17 @@ export default function App() {
     const groupMetrics = (rs) => {
       const pcTargetRecords = rs.filter(r => r.sales_method === '訪問');
       const pcDoneRecords = pcTargetRecords.filter(r => r.pc_proposal === '提案した');
-      const idDoneRecords = rs.filter(hasId);
+      const idTargetRecords = rs.filter(r => r.customer_type !== '既存');
+      const idDoneRecords = idTargetRecords.filter(hasId);
       return {
         pcTarget: pcTargetRecords.length,
         pcDone: pcDoneRecords.length,
         pcRate: pcTargetRecords.length > 0 ? (pcDoneRecords.length / pcTargetRecords.length * 100).toFixed(1) : null,
         pcTargetRecords, pcDoneRecords,
+        idTarget: idTargetRecords.length,
         idDone: idDoneRecords.length,
-        idRate: rs.length > 0 ? (idDoneRecords.length / rs.length * 100).toFixed(1) : '0',
-        idDoneRecords,
+        idRate: idTargetRecords.length > 0 ? (idDoneRecords.length / idTargetRecords.length * 100).toFixed(1) : null,
+        idTargetRecords, idDoneRecords,
         productRates: rateProducts.map(p => {
           const pr = rs.filter(r => r[`proposal_${p.id}`] === '○');
           return { id: p.id, name: p.name, color: p.color, proposed: pr.length, rate: rs.length > 0 ? (pr.length / rs.length * 100).toFixed(1) : '0', records: pr };
@@ -872,11 +874,14 @@ export default function App() {
       const key = (r.raksul_id_missing_reason || '').trim() || '理由未入力';
       idMissingReasonCounts[key] = (idMissingReasonCounts[key] || 0) + 1;
     });
-    const idAcquiredRecords = baseFilteredRecords.filter(hasId);
+    const idTargetAllRecords = baseFilteredRecords.filter(r => r.customer_type !== '既存');
+    const idAcquiredRecords = idTargetAllRecords.filter(hasId);
     const customerStats = {
+      idTargetAll: idTargetAllRecords.length,
+      idTargetAllRecords,
       idAcquired: idAcquiredRecords.length,
       idAcquiredRecords,
-      idAcquiredRate: totalVisits > 0 ? (idAcquiredRecords.length / totalVisits * 100).toFixed(1) : '0',
+      idAcquiredRate: idTargetAllRecords.length > 0 ? (idAcquiredRecords.length / idTargetAllRecords.length * 100).toFixed(1) : '0',
       newCount: newRecords.length,
       existingCount: existingRecords.length,
       unsetCount: unsetTypeRecords.length,
@@ -956,7 +961,7 @@ export default function App() {
                   <td style={{padding:'10px 8px',fontWeight:'600',whiteSpace:'nowrap'}}>{row.name}</td>
                   <CountCell count={row.visits} title={`${row.name} 訪問`} records={groupRecords} />
                   <RateCell rate={row.pcRate} sub={row.pcTarget>0?`${row.pcDone}/${row.pcTarget}`:'訪問なし'} title={`${row.name} PC提案あり`} records={row.pcDoneRecords} />
-                  <RateCell rate={row.idRate} sub={`${row.idDone}/${row.visits}`} title={`${row.name} ID取得`} records={row.idDoneRecords} />
+                  <RateCell rate={row.idRate} sub={row.idTarget>0?`${row.idDone}/${row.idTarget}`:'対象なし'} title={`${row.name} ID取得`} records={row.idDoneRecords} />
                   {row.productRates.map(pr=>(
                     <RateCell key={pr.id} rate={pr.rate} sub={`${pr.proposed}件`} title={`${row.name} ${pr.name}提案`} records={pr.records} />
                   ))}
@@ -971,7 +976,7 @@ export default function App() {
               <td style={{padding:'10px 8px',fontWeight:'700'}}>合計</td>
               <CountCell dark count={tVisits} title="全体 訪問" records={baseFilteredRecords} />
               <RateCell dark rate={totals.pcRate} sub={totals.pcTarget>0?`${totals.pcDone}/${totals.pcTarget}`:'訪問なし'} title="全体 PC提案あり" records={totals.pcDoneRecords} />
-              <RateCell dark rate={totals.idRate} sub={`${totals.idDone}/${tVisits}`} title="全体 ID取得" records={totals.idDoneRecords} />
+              <RateCell dark rate={totals.idRate} sub={totals.idTarget>0?`${totals.idDone}/${totals.idTarget}`:'対象なし'} title="全体 ID取得" records={totals.idDoneRecords} />
               {totals.productRates.map(pr=>(
                 <RateCell key={pr.id} dark rate={pr.rate} sub={`${pr.proposed}件`} title={`全体 ${pr.name}提案`} records={pr.records} />
               ))}
@@ -982,7 +987,7 @@ export default function App() {
           </tbody>
         </table>
         <div style={{marginTop:'8px',fontSize:'11px',color:'#94a3b8'}}>
-          ※ PC提案率は「訪問」した記録のみが母数です（遠隔は対象外）。ID取得率は新規のID開設と既存のID記録を合算した割合です。数字をタップすると該当企業を確認できます。
+          ※ PC提案率は「訪問」した記録のみが母数です（遠隔は対象外）。ID取得率は「既存ユーザー以外」を分母にした割合です（既存ユーザーは既にIDがあるため除外）。数字をタップすると該当企業を確認できます。
         </div>
       </div>
     );
@@ -1393,19 +1398,19 @@ export default function App() {
                         <td style={{padding:'12px 8px'}}><span style={{padding:'4px 10px',borderRadius:'6px',background:'#6366f115',color:'#4f46e5',fontWeight:'600'}}>🆔 ラクスルID</span></td>
                         <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',cursor:stats.customerStats.idAcquired>0?'pointer':'default',textDecoration:stats.customerStats.idAcquired>0?'underline':'none'}} onClick={()=>stats.customerStats.idAcquired>0&&setDetailModal({title:'ラクスルID取得',records:stats.customerStats.idAcquiredRecords})}>
                           {stats.customerStats.idAcquired}
-                          <div style={{fontSize:'10px',color:'#94a3b8',fontWeight:'400'}}>取得</div>
+                          <div style={{fontSize:'10px',color:'#94a3b8',fontWeight:'400'}}>/{stats.customerStats.idTargetAll} 取得</div>
                         </td>
                         <td style={{padding:'12px 8px',textAlign:'center',background:'#eff6ff',fontWeight:'700',color:'#2563eb'}}>
                           {stats.customerStats.idAcquiredRate}%
                           <div style={{fontSize:'10px',color:'#64748b',fontWeight:'400'}}>取得率</div>
                         </td>
-                        <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#059669',cursor:stats.customerStats.newIdOpened>0?'pointer':'default',textDecoration:stats.customerStats.newIdOpened>0?'underline':'none'}} onClick={()=>stats.customerStats.newIdOpened>0&&setDetailModal({title:'新規ID開設',records:stats.customerStats.newIdOpenedRecords})}>
-                          {stats.customerStats.newIdOpened}
-                          <div style={{fontSize:'10px',color:'#94a3b8',fontWeight:'400'}}>新規開設</div>
+                        <td style={{padding:'12px 8px',textAlign:'center',fontWeight:'600',color:'#059669',cursor:stats.customerStats.existingIdRecorded>0?'pointer':'default',textDecoration:stats.customerStats.existingIdRecorded>0?'underline':'none'}} onClick={()=>stats.customerStats.existingIdRecorded>0&&setDetailModal({title:'既存ID記録',records:stats.customerStats.existingIdRecordedRecords})}>
+                          {stats.customerStats.existingIdRecorded}
+                          <div style={{fontSize:'10px',color:'#94a3b8',fontWeight:'400'}}>既存記録</div>
                         </td>
                         <td style={{padding:'12px 8px',textAlign:'center',background:'#dcfce7',fontWeight:'700',color:'#059669'}}>
-                          {stats.customerStats.newIdRate}%
-                          <div style={{fontSize:'10px',color:'#64748b',fontWeight:'400'}}>新規開設率</div>
+                          {stats.customerStats.existingIdRate}%
+                          <div style={{fontSize:'10px',color:'#64748b',fontWeight:'400'}}>既存記録率</div>
                         </td>
                         <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
                         <td style={{padding:'12px 8px',textAlign:'center',background:'#f1f5f9',color:'#cbd5e1',fontSize:'11px'}}>対象外</td>
@@ -1469,7 +1474,7 @@ export default function App() {
                     </tbody>
                   </table>
                   <div style={{marginTop:'8px',fontSize:'11px',color:'#94a3b8'}}>
-                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外・訪問{stats.pcStats.targetVisits}件）。成約率・トスアップ率は提案数に対する割合です。トスアップが発生するのはMEO・動画のみで、モール購入・PC提案・ラクスルIDはROS内で完結するため「対象外」と表示されます。🆔ラクスルIDは列の意味が商材と異なるため、各数字の下に内容を表示しています（取得＝新規開設＋既存記録、未入力＝理由を記載して保存した件数）。
+                    ※ 提案率は全訪問に対する割合です。💻PCのみ「訪問」した記録が母数（遠隔は対象外・訪問{stats.pcStats.targetVisits}件）。成約率・トスアップ率は提案数に対する割合です。トスアップが発生するのはMEO・動画のみで、モール購入・PC提案・ラクスルIDはROS内で完結するため「対象外」と表示されます。🆔ラクスルIDは列の意味が商材と異なるため、各数字の下に内容を表示しています。取得率の分母は「既存ユーザー以外（＝IDを新たに取得できる訪問先）」で、既存ユーザーは除外しています。
                   </div>
                 </div>
               )}
