@@ -21,7 +21,7 @@ const SUPABASE_URL = 'https://bxhwkuvojijmhvzwcnyx.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ4aHdrdXZvamlqbWh2endjbnl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNzUzMjYsImV4cCI6MjA4NTc1MTMyNn0.Y9KmQfXaR-Ga9tC7UgezDdJpVX0E5vRpQ8ooQNk17eM';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const STAFF_LIST = ['知念', '山内', '奥濱', '喜如嘉', '徳田', '稲福', '石田', 'ヴィンス', '伊敷', '嘉数', '青木', '高吉', '橋本', '比嘉裕', '鎌倉', '上原', '前原', '大城', '石嶺', '栽', '照屋', '真栄城', '我如古', '下地', '城間'];
+const STAFF_LIST = ['知念', '山内', '奥濱', '喜如嘉', '徳田', '稲福', '石田', 'ヴィンス', '伊敷', '嘉数', '青木', '高吉', '橋本', '比嘉裕', '鎌倉', '上原', '前原', '大城', '石嶺', '栽', '照屋', '真栄城', '我如古', '下地', '城間', '當眞', '知念晃矢', '仲尾', '寺内', '宮平'];
 const OFFICE_LIST = ['ROS', 'TOS', 'PCチーム'];
 const INDUSTRY_LIST = ['製造', '建設', '卸売', '小売', '商社', '不動産', 'サービス', 'IT', '飲食', 'その他'];
 const ID_STATUS_LIST = ['提案⇒開設', '未開設', '開設済みだった', '-'];
