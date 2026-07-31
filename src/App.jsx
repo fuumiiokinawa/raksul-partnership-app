@@ -36,9 +36,9 @@ const NG_REASONS = {
   video: ['自分で撮れる', '素材が不要', '予算なし', '撮影対象がない', '興味なし', 'その他']
 };
 
+// 現在提案中の商材（入力フォーム用）
+// ※提案停止した商材はここから外す。過去データは下のALL_PRODUCTSで集計され続けます
 const PRODUCTS = [
-  { id: 'bank', name: 'バンク', color: '#2563EB' },
-  { id: 'pay', name: 'ペイ', color: '#059669' },
   { id: 'mall', name: 'モール', color: '#D97706' },
   { id: 'meo', name: 'MEO', color: '#7C3AED' },
   { id: 'video', name: '動画', color: '#DC2626' }
@@ -608,7 +608,7 @@ export default function App() {
     setShowForm(true);
     // 既存のNG理由が定型外なら「その他」入力を表示
     const otherInputs = {};
-    PRODUCTS.forEach(p => {
+    ALL_PRODUCTS.forEach(p => {
       if (r[`ng_${p.id}`] && !NG_REASONS[p.id].includes(r[`ng_${p.id}`])) {
         otherInputs[p.id] = true;
       }
@@ -1343,7 +1343,7 @@ export default function App() {
                           </td>
                           <td style={{padding:'14px 10px'}}>
                             <div style={{display:'flex',gap:'4px',flexWrap:'wrap'}}>
-                              {PRODUCTS.filter(p=>r[`proposal_${p.id}`]==='○').map(p=>
+                              {ALL_PRODUCTS.filter(p=>r[`proposal_${p.id}`]==='○').map(p=>
                                 <span key={p.id} style={{padding:'3px 8px',background:`${p.color}20`,color:p.color,borderRadius:'4px',fontSize:'11px'}}>{p.name}</span>
                               )}
                             </div>
