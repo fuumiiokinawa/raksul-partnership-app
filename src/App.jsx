@@ -22,7 +22,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const STAFF_LIST = ['知念', '山内', '奥濱', '喜如嘉', '徳田', '稲福', '石田', 'ヴィンス', '伊敷', '嘉数', '青木', '高吉', '橋本', '比嘉裕', '鎌倉', '上原', '前原', '大城', '石嶺', '栽', '照屋', '真栄城', '我如古', '下地', '城間', '當眞', '知念晃矢', '仲尾', '寺内', '宮平'];
-const OFFICE_LIST = ['ROS', 'TOS', 'PCチーム'];
+const OFFICE_LIST = ['ROS', 'TOS', 'PCチーム', '大阪オフィス'];
 const INDUSTRY_LIST = ['製造', '建設', '卸売', '小売', '商社', '不動産', 'サービス', 'IT', '飲食', 'その他'];
 const ID_STATUS_LIST = ['提案⇒開設', '未開設', '開設済みだった', '-'];
 const RESULT_LIST = ['契約', '内諾', 'トスアップ', 'NG', '検討中', '未提案', '-'];
