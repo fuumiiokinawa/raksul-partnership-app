@@ -51,7 +51,8 @@ const TIMING_LIST = ['営業', '取材', 'PC設置・回収時', 'その他'];
 // PC提案の結果まわり
 const PC_DEVICE_LIST = ['A4', 'モバイル', 'DT'];
 const PC_UNIT_RANGES = ['1台', '2台', '3台', '4台', '5台', '6台', '7台', '8台', '9台', '10台', '11台以上'];
-const PC_NG_REASONS = ['既存リースが残っている', '価格が合わない', '社内決裁が下りない', '既存ベンダーを継続', '台数が少なく不要', '検討中で保留', 'その他'];
+const PC_PENDING_REASONS = ['社内で検討中', '見積提示済み・回答待ち', '他社と比較検討中', '予算確保待ち', 'リース満了待ち', '再訪問の約束済み', 'その他'];
+const PC_NG_REASONS = ['既存リースが残っている', '価格が合わない', '社内決裁が下りない', '既存ベンダーを継続', '台数が少なく不要', 'その他'];
 
 // ラクスルIDを入力できなかった理由（定型）
 const ID_MISSING_REASONS = ['担当者が不在で確認できず', '顧客がID開示を拒否', '後日あらためて登録予定', 'メールアドレスが不明', 'ID登録自体を断られた', 'その他'];
@@ -558,6 +559,10 @@ export default function App() {
           return;
         }
       }
+      if (formData.pc_result === '検討中' && !(formData.pc_ng_reason || '').trim()) {
+        alert('検討中の場合は、検討している理由・状況を選択してください');
+        return;
+      }
       if (formData.pc_result === 'NG' && !(formData.pc_ng_reason || '').trim()) {
         alert('PCがNGだった理由を選択してください');
         return;
@@ -689,7 +694,7 @@ export default function App() {
     // ID未入力（理由記載）モードの復元
     const missing = r.raksul_id_missing_reason || '';
     setIdBlocked(!!missing);
-    setShowPcNgOther(!!r.pc_ng_reason && !PC_NG_REASONS.includes(r.pc_ng_reason));
+    setShowPcNgOther(!!r.pc_ng_reason && !(r.pc_result === '検討中' ? PC_PENDING_REASONS : PC_NG_REASONS).includes(r.pc_ng_reason));
     setShowIdReasonOther(!!missing && !ID_MISSING_REASONS.includes(missing));
     // 既存のNG理由が定型外なら「その他」入力を表示
     const otherInputs = {};
@@ -813,6 +818,13 @@ export default function App() {
     });
     const pcOrderedRecords = pcProposedRecords.filter(r => r.pc_result === '受注');
     const pcNgRecords = pcProposedRecords.filter(r => r.pc_result === 'NG');
+    const pcPendingRecords = pcProposedRecords.filter(r => r.pc_result === '検討中');
+    const pcPendingReasonCounts = {};
+    pcPendingRecords.forEach(r => {
+      const key = (r.pc_ng_reason || '').trim() || '状況未入力';
+      pcPendingReasonCounts[key] = (pcPendingReasonCounts[key] || 0) + 1;
+    });
+    const pcDecidedRecords = pcProposedRecords.filter(r => r.pc_result === '受注' || r.pc_result === 'NG');
     const pcResultUnrecordedRecords = pcProposedRecords.filter(r => !r.pc_result);
     const pcDeviceCounts = {};
     pcOrderedRecords.forEach(r => {
@@ -831,8 +843,12 @@ export default function App() {
     const pcStats = {
       ordered: pcOrderedRecords.length,
       ngCount: pcNgRecords.length,
+      pending: pcPendingRecords.length,
+      pendingRecords: pcPendingRecords,
+      pendingReasons: Object.entries(pcPendingReasonCounts).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
+      decided: pcDecidedRecords.length,
       resultUnrecorded: pcResultUnrecordedRecords.length,
-      orderRate: pcProposedRecords.length > 0 ? (pcOrderedRecords.length / pcProposedRecords.length * 100).toFixed(1) : '0',
+      orderRate: pcDecidedRecords.length > 0 ? (pcOrderedRecords.length / pcDecidedRecords.length * 100).toFixed(1) : '0',
       orderedRecords: pcOrderedRecords,
       ngRecords: pcNgRecords,
       resultUnrecordedRecords: pcResultUnrecordedRecords,
@@ -1141,11 +1157,12 @@ export default function App() {
                     {stats.pcStats.proposed > 0 && (
                       <div style={{marginBottom:'12px',padding:'12px',background:'#f8fafc',borderRadius:'8px'}}>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:'8px'}}>
-                          <span style={{fontSize:'12px',fontWeight:'600',color:'#166534'}}>🎉 提案後の受注率</span>
+                          <span style={{fontSize:'12px',fontWeight:'600',color:'#166534'}}>🎉 提案後の受注率<span style={{fontSize:'10px',fontWeight:'400',color:'#94a3b8',marginLeft:'4px'}}>（検討中を除く）</span></span>
                           <span style={{fontSize:'18px',fontWeight:'700',color:Number(stats.pcStats.orderRate)>=50?'#059669':Number(stats.pcStats.orderRate)>=20?'#d97706':'#dc2626'}}>{stats.pcStats.orderRate}%</span>
                         </div>
                         <div style={{display:'flex',gap:'8px',fontSize:'11px',flexWrap:'wrap',marginBottom:'8px'}}>
                           <span onClick={()=>stats.pcStats.ordered>0&&setDetailModal({title:'PC受注',records:stats.pcStats.orderedRecords})} style={{color:'#059669',fontWeight:'600',cursor:stats.pcStats.ordered>0?'pointer':'default',textDecoration:stats.pcStats.ordered>0?'underline':'none'}}>受注 {stats.pcStats.ordered}件</span>
+                          <span onClick={()=>stats.pcStats.pending>0&&setDetailModal({title:'PC 検討中',records:stats.pcStats.pendingRecords})} style={{color:'#d97706',cursor:stats.pcStats.pending>0?'pointer':'default',textDecoration:stats.pcStats.pending>0?'underline':'none'}}>検討中 {stats.pcStats.pending}件</span>
                           <span onClick={()=>stats.pcStats.ngCount>0&&setDetailModal({title:'PC NG',records:stats.pcStats.ngRecords})} style={{color:'#dc2626',cursor:stats.pcStats.ngCount>0?'pointer':'default',textDecoration:stats.pcStats.ngCount>0?'underline':'none'}}>NG {stats.pcStats.ngCount}件</span>
                           {stats.pcStats.resultUnrecorded>0 && (
                             <span onClick={()=>setDetailModal({title:'PC結果 未記録',records:stats.pcStats.resultUnrecordedRecords})} style={{color:'#94a3b8',cursor:'pointer',textDecoration:'underline'}}>未記録 {stats.pcStats.resultUnrecorded}件</span>
@@ -1164,6 +1181,14 @@ export default function App() {
                             <span style={{fontSize:'11px',color:'#64748b',alignSelf:'center'}}>台数（計 約{stats.pcStats.totalUnits}台）：</span>
                             {stats.pcStats.units.map(u=>(
                               <span key={u.name} style={{padding:'3px 10px',background:'#eff6ff',color:'#1e40af',borderRadius:'8px',fontSize:'11px'}}>{u.name} <strong>{u.count}</strong></span>
+                            ))}
+                          </div>
+                        )}
+                        {stats.pcStats.pendingReasons.length > 0 && (
+                          <div style={{display:'flex',flexWrap:'wrap',gap:'6px',marginBottom:'6px'}}>
+                            <span style={{fontSize:'11px',color:'#64748b',alignSelf:'center'}}>検討状況：</span>
+                            {stats.pcStats.pendingReasons.map(n=>(
+                              <span key={n.reason} style={{padding:'3px 10px',background:'#fef3c7',color:'#92400e',borderRadius:'8px',fontSize:'11px'}}>{n.reason} <strong>{n.count}</strong></span>
                             ))}
                           </div>
                         )}
@@ -1863,10 +1888,32 @@ export default function App() {
                     {formData.pc_proposal === '提案した' && (
                       <div style={{marginTop:'10px',padding:'12px',background:'#fff',borderRadius:'8px',border:'2px solid #059669'}}>
                         <div style={{fontSize:'12px',color:'#059669',fontWeight:'700',marginBottom:'8px'}}>提案の結果<span style={{color:'#dc2626',marginLeft:'4px'}}>*必須</span></div>
-                        <div style={{display:'flex',gap:'8px',marginBottom:'10px'}}>
-                          <button type="button" onClick={()=>{setFormData({...formData,pc_result:'受注',pc_ng_reason:''});setShowPcNgOther(false);}} style={{flex:1,padding:'10px',borderRadius:'6px',border:formData.pc_result==='受注'?'2px solid #059669':'1px solid #e2e8f0',background:formData.pc_result==='受注'?'#dcfce7':'#fff',color:formData.pc_result==='受注'?'#059669':'#64748b',fontSize:'13px',fontWeight:formData.pc_result==='受注'?'700':'400',cursor:'pointer'}}>🎉 受注</button>
-                          <button type="button" onClick={()=>setFormData({...formData,pc_result:'NG',pc_devices:'',pc_units:''})} style={{flex:1,padding:'10px',borderRadius:'6px',border:formData.pc_result==='NG'?'2px solid #dc2626':'1px solid #e2e8f0',background:formData.pc_result==='NG'?'#fee2e2':'#fff',color:formData.pc_result==='NG'?'#991b1b':'#64748b',fontSize:'13px',fontWeight:formData.pc_result==='NG'?'700':'400',cursor:'pointer'}}>✗ NG</button>
+                        <div style={{display:'flex',gap:'6px',marginBottom:'10px'}}>
+                          <button type="button" onClick={()=>{setFormData({...formData,pc_result:'受注',pc_ng_reason:''});setShowPcNgOther(false);}} style={{flex:1,padding:'10px 6px',borderRadius:'6px',border:formData.pc_result==='受注'?'2px solid #059669':'1px solid #e2e8f0',background:formData.pc_result==='受注'?'#dcfce7':'#fff',color:formData.pc_result==='受注'?'#059669':'#64748b',fontSize:'13px',fontWeight:formData.pc_result==='受注'?'700':'400',cursor:'pointer'}}>🎉 受注</button>
+                          <button type="button" onClick={()=>{setFormData({...formData,pc_result:'検討中',pc_devices:'',pc_units:'',pc_ng_reason:''});setShowPcNgOther(false);}} style={{flex:1,padding:'10px 6px',borderRadius:'6px',border:formData.pc_result==='検討中'?'2px solid #d97706':'1px solid #e2e8f0',background:formData.pc_result==='検討中'?'#fef3c7':'#fff',color:formData.pc_result==='検討中'?'#92400e':'#64748b',fontSize:'13px',fontWeight:formData.pc_result==='検討中'?'700':'400',cursor:'pointer'}}>🤔 検討中</button>
+                          <button type="button" onClick={()=>{setFormData({...formData,pc_result:'NG',pc_devices:'',pc_units:'',pc_ng_reason:''});setShowPcNgOther(false);}} style={{flex:1,padding:'10px 6px',borderRadius:'6px',border:formData.pc_result==='NG'?'2px solid #dc2626':'1px solid #e2e8f0',background:formData.pc_result==='NG'?'#fee2e2':'#fff',color:formData.pc_result==='NG'?'#991b1b':'#64748b',fontSize:'13px',fontWeight:formData.pc_result==='NG'?'700':'400',cursor:'pointer'}}>✗ NG</button>
                         </div>
+
+                        {/* 検討中：状況 */}
+                        {formData.pc_result === '検討中' && (
+                          <div style={{padding:'10px',background:'#fffbeb',borderRadius:'6px'}}>
+                            <div style={{fontSize:'11px',color:'#92400e',fontWeight:'600',marginBottom:'6px'}}>検討状況<span style={{color:'#dc2626',marginLeft:'4px'}}>*必須</span></div>
+                            <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                              {PC_PENDING_REASONS.map(reason=>{
+                                const selected = reason === 'その他' ? showPcNgOther : (!showPcNgOther && formData.pc_ng_reason === reason);
+                                return (
+                                  <button key={reason} type="button" onClick={()=>{
+                                    if (reason === 'その他') { setShowPcNgOther(true); setFormData({...formData, pc_ng_reason:''}); }
+                                    else { setShowPcNgOther(false); setFormData({...formData, pc_ng_reason:reason}); }
+                                  }} style={{padding:'8px 12px',borderRadius:'6px',border:selected?'2px solid #d97706':'1px solid #e2e8f0',background:selected?'#fef3c7':'#fff',color:selected?'#92400e':'#64748b',fontSize:'12px',fontWeight:selected?'600':'400',cursor:'pointer'}}>{reason}</button>
+                                );
+                              })}
+                            </div>
+                            {showPcNgOther && (
+                              <input type="text" placeholder="検討状況を具体的に入力 *必須" value={formData.pc_ng_reason || ''} onChange={e=>setFormData({...formData,pc_ng_reason:e.target.value})} style={{width:'100%',marginTop:'8px',padding:'10px',borderRadius:'6px',border:'1px solid #e2e8f0',fontSize:'13px',boxSizing:'border-box'}} />
+                            )}
+                          </div>
+                        )}
 
                         {/* 受注：機種＋台数 */}
                         {formData.pc_result === '受注' && (
